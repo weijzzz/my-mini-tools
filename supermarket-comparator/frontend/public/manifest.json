@@ -1,0 +1,10 @@
+{
+  "theme_color": "#2563EB",
+  "background_color": "#F8FAFC",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "name": "Gran Canaria Price Comparator",
+  "short_name": "GC Prices",
+  "description": "Compare supermarket prices in Las Palmas across Mercadona, HiperDino, Carrefour, and Spar."
+}
