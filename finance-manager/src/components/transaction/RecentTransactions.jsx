@@ -22,7 +22,11 @@ export default function RecentTransactions({
 
   const source = transactions ?? allTransactions;
   const sorted = useMemo(() => {
-    if (!sortByDate) return source;
+    // Entry page: newest entries first, whatever order storage or an
+    // imported backup has them in.
+    if (!sortByDate) {
+      return [...source].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    }
     return [...source].sort(
       (a, b) =>
         (b.date || '').localeCompare(a.date || '') ||

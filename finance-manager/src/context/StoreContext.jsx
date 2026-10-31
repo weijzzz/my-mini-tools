@@ -6,6 +6,8 @@ import {
   saveSubCategories,
   getTransactions,
   saveTransactions,
+  readPref,
+  writePref,
   generateId,
 } from '../utils/storage';
 import { currentMonthString } from '../utils/date';
@@ -22,6 +24,13 @@ export function StoreProvider({ children }) {
   
   const [currentPage, setCurrentPage] = useState('entry'); // 'entry' | 'dashboard'
   const [selectedMonth, setSelectedMonth] = useState(() => currentMonthString());
+  // Order of the 项目 cards: 'name' (A→Z), 'frequent' or 'custom'.
+  const [subSort, setSubSortState] = useState(() => readPref('sub_sort', 'custom'));
+
+  const setSubSort = useCallback((mode) => {
+    setSubSortState(mode);
+    writePref('sub_sort', mode);
+  }, []);
 
   // Derived: filteredTransactions by selectedMonth
   const filteredTransactions = useMemo(
@@ -41,7 +50,66 @@ export function StoreProvider({ children }) {
     [mainCategories]
   );
 
+  /** Save the tab order chosen by the user (array order = display order). */
+  const reorderMainCategories = useCallback(
+    (orderedIds) => {
+      const byId = new Map(mainCategories.map((c) => [c.id, c]));
+      const next = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+      mainCategories.forEach((c) => {
+        if (!orderedIds.includes(c.id)) next.push(c);
+      });
+      setMainCategories(next);
+      saveMainCategories(next);
+    },
+    [mainCategories]
+  );
+
+  const renameMainCategory = useCallback(
+    (id, name) => {
+      const next = mainCategories.map((c) => (c.id === id ? { ...c, name } : c));
+      setMainCategories(next);
+      saveMainCategories(next);
+      // Keep history readable under the new name.
+      const updatedTrans = transactions.map((t) => (t.mainId === id ? { ...t, mainName: name } : t));
+      setTransactions(updatedTrans);
+      saveTransactions(updatedTrans);
+    },
+    [mainCategories, transactions]
+  );
+
+  /** Remove a tab and its 项目. Past transactions are kept (they store names). */
+  const deleteMainCategory = useCallback(
+    (id) => {
+      if (mainCategories.length <= 1) return false;
+      const next = mainCategories.filter((c) => c.id !== id);
+      setMainCategories(next);
+      saveMainCategories(next);
+      const subs = subCategories.filter((s) => s.mainId !== id);
+      setSubCategories(subs);
+      saveSubCategories(subs);
+      if (currentMainCategoryId === id) setCurrentMainCategoryId(next[0].id);
+      return true;
+    },
+    [mainCategories, subCategories, currentMainCategoryId]
+  );
+
   // ── Sub Category CRUD ───────────────────────────────────────────
+
+  /** Reorder the 项目 of one tab; other tabs keep their order. */
+  const reorderSubCategories = useCallback(
+    (mainId, orderedIds) => {
+      const mine = subCategories.filter((s) => s.mainId === mainId);
+      const byId = new Map(mine.map((s) => [s.id, s]));
+      const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+      mine.forEach((s) => {
+        if (!orderedIds.includes(s.id)) ordered.push(s);
+      });
+      const next = [...subCategories.filter((s) => s.mainId !== mainId), ...ordered];
+      setSubCategories(next);
+      saveSubCategories(next);
+    },
+    [subCategories]
+  );
 
   const addSubCategory = useCallback(
     (mainId, name, note = '') => {
@@ -169,6 +237,13 @@ export function StoreProvider({ children }) {
       setCurrentPage,
       
       addMainCategory,
+      reorderMainCategories,
+      renameMainCategory,
+      deleteMainCategory,
+
+      subSort,
+      setSubSort,
+      reorderSubCategories,
       
       addSubCategory,
       updateSubCategory,
@@ -187,6 +262,12 @@ export function StoreProvider({ children }) {
       selectedMonth,
       currentPage,
       addMainCategory,
+      reorderMainCategories,
+      renameMainCategory,
+      deleteMainCategory,
+      subSort,
+      setSubSort,
+      reorderSubCategories,
       addSubCategory,
       updateSubCategory,
       deleteSubCategory,

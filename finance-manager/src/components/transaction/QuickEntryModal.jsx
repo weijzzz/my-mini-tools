@@ -5,7 +5,7 @@ import { Zap } from 'lucide-react';
 import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
 import { todayString } from '../../utils/date';
 
-export default function QuickEntryModal({ isOpen, onClose, subCategory }) {
+export default function QuickEntryModal({ isOpen, onClose, subCategory, onAdded }) {
   const { addTransaction, mainCategories } = useStore();
   const [amount, setAmount] = useState('');
 
@@ -26,7 +26,7 @@ export default function QuickEntryModal({ isOpen, onClose, subCategory }) {
     if (!(value > 0)) return;
     const expr = isAmountExpression(amount) ? amount.replace(/\s+/g, '') : '';
 
-    addTransaction({
+    const txn = addTransaction({
       mainId: subCategory.mainId,
       subId: subCategory.id,
       amount: value,
@@ -37,6 +37,7 @@ export default function QuickEntryModal({ isOpen, onClose, subCategory }) {
     if (window.navigator && window.navigator.vibrate) {
       window.navigator.vibrate([30, 50, 30]);
     }
+    onAdded?.(txn);
     onClose();
   };
 

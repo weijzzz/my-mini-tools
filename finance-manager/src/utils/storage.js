@@ -30,6 +30,15 @@ export function generateId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
+// Small UI settings (sort mode…), included in backups like everything else.
+export function readPref(key, fallback) {
+  return readKey(`pref_${key}`) ?? fallback;
+}
+
+export function writePref(key, value) {
+  writeKey(`pref_${key}`, value);
+}
+
 // ── Main Categories (Tabs) ──
 const DEFAULT_MAIN_CATEGORIES = [
   { id: 'cat_food', name: '餐饮', type: 'expense', icon: 'Utensils' },
