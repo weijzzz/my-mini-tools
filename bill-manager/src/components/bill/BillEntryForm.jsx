@@ -4,12 +4,22 @@ import { useStore } from '../../context/StoreContext';
 import Toast from '../ui/Toast';
 import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
 import { defaultDateForMonth } from '../../utils/date';
+import { readStoreValue, writeStoreValue } from '../../utils/storage';
 
 export default function BillEntryForm({ selectedSupplier }) {
-  const { categories, addBill, selectedMonth } = useStore();
+  const { categories, addBill, selectedMonth, currentStoreId } = useStore();
 
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
+  // Start with the category used last time in this store: most bills from a
+  // shop share one, so this saves a tap per bill.
+  const [category, setCategoryState] = useState(() => {
+    const last = readStoreValue(currentStoreId, 'last_category', '');
+    return categories.includes(last) ? last : '';
+  });
+  const setCategory = (cat) => {
+    setCategoryState(cat);
+    writeStoreValue(currentStoreId, 'last_category', cat);
+  };
   const [date, setDate] = useState(() => defaultDateForMonth(selectedMonth));
   const [note, setNote] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success', isVisible: false });

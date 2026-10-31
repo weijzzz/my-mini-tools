@@ -6,14 +6,31 @@ import {
   ArrowRight,
   Save,
   X,
+  CalendarClock,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import Modal from '../ui/Modal';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import Toast from '../ui/Toast';
+import BatchDateModal from './BatchDateModal';
 import { evaluateAmount, formatEuro, isAllowedAmountInput } from '../../utils/amount';
 
 export default function BillList({ bills = [], limit, showTitle = true }) {
-  const { categories, suppliers, updateBill, deleteBill } = useStore();
+  const { categories, suppliers, updateBill, deleteBill, selectedMonth } = useStore();
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [toast, setToast] = useState({ message: '', type: 'success', isVisible: false });
+
+  const handleMoved = (count, date) => {
+    if (!count) return;
+    const other = !date.startsWith(selectedMonth);
+    setToast({
+      message: `已把 ${count} 笔账单改到 ${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日${
+        other ? `（在 ${date.slice(0, 7)} 月份里查看）` : ''
+      }`,
+      type: 'success',
+      isVisible: true,
+    });
+  };
 
   const [editingBill, setEditingBill] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -81,21 +98,43 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
 
   const formatAmount = formatEuro;
 
+  const toastEl = (
+    <Toast
+      message={toast.message}
+      type={toast.type}
+      isVisible={toast.isVisible}
+      onClose={() => setToast((t) => ({ ...t, isVisible: false }))}
+    />
+  );
+
   if (sortedBills.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-slate-400">
         <FileX className="w-12 h-12 mb-3 text-slate-300" strokeWidth={1.2} />
         <p className="text-sm font-medium">暂无账单记录</p>
+        {toastEl}
       </div>
     );
   }
 
+  const listTotal = sortedBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+
   return (
     <div>
       {showTitle && (
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-          账单列表
-        </h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <span className="text-sm text-slate-500">
+            共 {sortedBills.length} 笔 · <span className="font-semibold text-slate-700">{formatAmount(listTotal)}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setBatchOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-teal-700 bg-teal-50 rounded-lg active:bg-teal-100"
+          >
+            <CalendarClock className="w-4 h-4" />
+            批量改日期
+          </button>
+        </div>
       )}
 
       {/* ===== Desktop Table ===== */}
@@ -353,6 +392,14 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
         title="删除账单"
         message={`确定要删除该笔 ${formatAmount(deleteTarget?.amount || 0)} 的账单吗？此操作不可撤销。`}
       />
+
+      <BatchDateModal
+        isOpen={batchOpen}
+        onClose={() => setBatchOpen(false)}
+        initialDate={sortedBills[0]?.date}
+        onMoved={handleMoved}
+      />
+      {toastEl}
     </div>
   );
 }

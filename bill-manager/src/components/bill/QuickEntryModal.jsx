@@ -6,7 +6,7 @@ import Toast from '../ui/Toast';
 import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
 import { defaultDateForMonth } from '../../utils/date';
 
-export default function QuickEntryModal({ isOpen, onClose, supplier }) {
+export default function QuickEntryModal({ isOpen, onClose, supplier, onAdded }) {
   const { categories, addBill, selectedMonth } = useStore();
   const [amount, setAmount] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success', isVisible: false });
@@ -42,7 +42,7 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
     const mathExpr = isAmountExpression(amount) ? amount.replace(/\s+/g, '') : '';
     const finalNote = mathExpr ? `(闪电录入: ${mathExpr})` : '(闪电录入)';
 
-    addBill({
+    const bill = addBill({
       supplierId: supplier.id,
       supplierName: supplier.name,
       amount: finalAmount,
@@ -51,6 +51,8 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
       note: finalNote,
     });
 
+    navigator.vibrate?.(30);
+    onAdded?.(bill);
     onClose();
   };
 

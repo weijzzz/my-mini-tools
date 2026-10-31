@@ -4,7 +4,7 @@ import { useStore } from '../../context/StoreContext';
 import Modal from '../ui/Modal';
 import { getSuppliers } from '../../utils/storage';
 
-export default function AddSupplierModal({ isOpen, onClose, onSupplierAdded }) {
+export default function AddSupplierModal({ isOpen, onClose, onSupplierAdded, initialName = '' }) {
   const { stores, currentStoreId, suppliers, addSupplier } = useStore();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -19,14 +19,14 @@ export default function AddSupplierModal({ isOpen, onClose, onSupplierAdded }) {
 
   useEffect(() => {
     if (isOpen) {
-      setName('');
+      setName(initialName);
       setError('');
       setImportStoreId(otherStores.length > 0 ? otherStores[0].id : '');
       const t = setTimeout(() => inputRef.current?.focus(), 100);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [isOpen, otherStores]);
+  }, [isOpen, otherStores, initialName]);
 
   useEffect(() => {
     if (importStoreId) {

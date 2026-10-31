@@ -26,7 +26,7 @@ function NavButton({ active, onClick, icon: Icon, label }) {
 }
 
 function AppContent() {
-  const { currentPage, setCurrentPage } = useStore();
+  const { currentPage, setCurrentPage, currentStoreId } = useStore();
   const [showStoreManager, setShowStoreManager] = useState(false);
 
   // Each tab starts at the top instead of inheriting the other tab's scroll.
@@ -55,7 +55,9 @@ function AppContent() {
         />
       </aside>
       <main className="md:ml-56">
-        {currentPage === 'entry' ? <EntryPage /> : <DashboardPage />}
+        {/* Keyed by store so a supplier picked in one store can never be used
+            for a bill in another. */}
+        {currentPage === 'entry' ? <EntryPage key={currentStoreId} /> : <DashboardPage />}
       </main>
 
       <BottomNav />

@@ -39,6 +39,24 @@ export function generateId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
+// Small settings: global ("pref_*") or per store ("{storeId}_*", removed
+// together with the store).
+export function readPref(key, fallback) {
+  return readKey(`pref_${key}`) ?? fallback;
+}
+
+export function writePref(key, value) {
+  writeKey(`pref_${key}`, value);
+}
+
+export function readStoreValue(storeId, key, fallback) {
+  return readKey(`${storeId}_${key}`) ?? fallback;
+}
+
+export function writeStoreValue(storeId, key, value) {
+  writeKey(`${storeId}_${key}`, value);
+}
+
 // Remember which store was open so reopening the app lands on it again.
 export function getLastStoreId() {
   return readKey('current_store');
