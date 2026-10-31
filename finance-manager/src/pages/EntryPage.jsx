@@ -6,6 +6,14 @@ import RecentTransactions from '../components/transaction/RecentTransactions';
 import AddMainCategoryModal from '../components/category/AddMainCategoryModal';
 import { Utensils, Car, ShoppingBag, Wallet, Tag, Plus } from 'lucide-react';
 
+// Older saved categories have no `icon`, so fall back to the default ids.
+const DEFAULT_ICON_BY_ID = {
+  cat_food: 'Utensils',
+  cat_trans: 'Car',
+  cat_shop: 'ShoppingBag',
+  cat_income: 'Wallet',
+};
+
 const ICON_MAP = {
   Utensils: <Utensils size={18} />,
   Car: <Car size={18} />,
@@ -26,7 +34,7 @@ export default function EntryPage() {
   const currentMainCat = mainCategories.find(c => c.id === currentMainCategoryId);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
+    <div className="max-w-3xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
       {/* Top Tabs for Main Categories */}
       <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-2 custom-scrollbar">
         {mainCategories.map((cat) => {
@@ -35,6 +43,7 @@ export default function EntryPage() {
           return (
             <button
               key={cat.id}
+              type="button"
               onClick={() => {
                 setCurrentMainCategoryId(cat.id);
                 setSelectedSubId(null);
@@ -48,7 +57,7 @@ export default function EntryPage() {
               }`}
             >
               <span className={isActive ? (isIncome ? 'text-emerald-500' : 'text-sky-500') : 'text-slate-400'}>
-                {ICON_MAP[cat.icon] || <Tag size={18} />}
+                {ICON_MAP[cat.icon || DEFAULT_ICON_BY_ID[cat.id]] || <Tag size={18} />}
               </span>
               {cat.name}
             </button>
@@ -57,6 +66,8 @@ export default function EntryPage() {
 
         {/* Add Main Category Button */}
         <button
+          type="button"
+          aria-label="新增大分类"
           onClick={() => setAddMainCatModalOpen(true)}
           className="flex items-center justify-center min-w-[52px] h-[52px] rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-sky-400 hover:text-sky-500 transition-all shrink-0 ml-1"
           title="新增大分类"

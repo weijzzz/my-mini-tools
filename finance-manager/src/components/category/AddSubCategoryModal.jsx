@@ -14,12 +14,9 @@ export default function AddSubCategoryModal({ isOpen, onClose, onSubAdded }) {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const newSub = addSubCategory(currentMainCategoryId, name.trim());
-    if (note.trim()) {
-      // SubCategories don't have note by default in context, but we can store it
-      // Let's just use updateSubCategory to add note if needed, or modify context
-    }
-    
+    // The note used to be collected and then dropped; it is now saved.
+    const newSub = addSubCategory(currentMainCategoryId, name.trim(), note.trim());
+
     if (onSubAdded) {
       onSubAdded(newSub);
     }

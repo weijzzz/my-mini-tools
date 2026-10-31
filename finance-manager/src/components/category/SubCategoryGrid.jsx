@@ -1,5 +1,5 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { Truck, Plus, Settings, Zap, FileText, Tag } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { Plus, Settings, Zap, FileText, Tag } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import AddSubCategoryModal from './AddSubCategoryModal';
 import QuickEntryModal from '../transaction/QuickEntryModal';
@@ -48,7 +48,13 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
     }
   };
 
-  const handleTouchStart = (e, sub) => {
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  // Pointer events handle touch and mouse in one path (touch + emulated
+  // mouse events used to arm the long-press timer twice on phones).
+  const handlePressStart = (e, sub) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    clearTimeout(timerRef.current);
     isLongPress.current = false;
     timerRef.current = setTimeout(() => {
       isLongPress.current = true;
@@ -59,7 +65,7 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
     }, 500);
   };
 
-  const handleTouchEnd = () => {
+  const handlePressEnd = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -91,20 +97,23 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
 
           return (
             <button
+              type="button"
               key={sub.id}
               onClick={() => handleClick(sub)}
-              onTouchStart={(e) => handleTouchStart(e, sub)}
-              onTouchEnd={handleTouchEnd}
-              onTouchMove={handleTouchEnd}
-              onMouseDown={(e) => handleTouchStart(e, sub)}
-              onMouseUp={handleTouchEnd}
-              onMouseLeave={handleTouchEnd}
+              onPointerDown={(e) => handlePressStart(e, sub)}
+              onPointerUp={handlePressEnd}
+              onPointerLeave={handlePressEnd}
+              onPointerCancel={handlePressEnd}
+              onContextMenu={(e) => e.preventDefault()}
               className={`relative group flex flex-col items-center justify-center min-h-[64px] rounded-xl p-3 border-2 transition-all duration-150 cursor-pointer select-none ${
                 isSelected ? selectedClasses : unselectedClasses
               }`}
             >
               {/* Edit button on top right */}
               <span
+                role="button"
+                aria-label={`编辑 ${sub.name}`}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => handleEdit(e, sub)}
                 className="absolute -top-2 -right-2 w-7 h-7 flex items-center justify-center bg-slate-100 text-slate-500 rounded-full transition-opacity cursor-pointer hover:bg-slate-200 shadow-sm z-10 border border-slate-200"
                 title="编辑/删除"
@@ -114,6 +123,9 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
 
               {/* Quick Entry Button */}
               <span
+                role="button"
+                aria-label={`极速录入 ${sub.name}`}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => handleQuickEntry(e, sub)}
                 className="absolute -top-3 -left-3 w-10 h-10 flex items-center justify-center bg-gradient-to-br from-amber-400 to-amber-500 text-white rounded-full transition-transform cursor-pointer hover:from-amber-500 hover:to-amber-600 shadow-md z-10 hover:scale-110 active:scale-95 border-2 border-white"
                 title="极速录入"
@@ -123,6 +135,9 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
               
               {/* Detail Button */}
               <span
+                role="button"
+                aria-label={`明细 ${sub.name}`}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => handleShowDetail(e, sub)}
                 className={`absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-full transition-opacity cursor-pointer shadow-sm z-10 border border-white md:opacity-0 md:group-hover:opacity-100 opacity-100 ${
                   isIncome ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-sky-100 text-sky-600 hover:bg-sky-200'
@@ -150,6 +165,7 @@ export default function SubCategoryGrid({ selectedSubId, onSelect }) {
 
         {/* Add New SubCategory Card */}
         <button
+          type="button"
           onClick={() => setAddModalOpen(true)}
           className={`flex flex-col items-center justify-center min-h-[64px] rounded-xl p-3 border-2 border-dashed border-slate-300 text-slate-400 transition-all duration-150 cursor-pointer active:scale-95 ${
             isIncome 

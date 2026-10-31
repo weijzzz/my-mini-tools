@@ -5,7 +5,9 @@ import DailyTrendChart from '../components/dashboard/DailyTrendChart';
 import MonthlyTrendChart from '../components/dashboard/MonthlyTrendChart';
 import CategoryChart from '../components/dashboard/CategoryChart';
 import SubCategoryPieChart from '../components/dashboard/SubCategoryPieChart';
+import RecentTransactions from '../components/transaction/RecentTransactions';
 import { getAllStorageData, restoreAllStorageData } from '../utils/storage';
+import { todayString } from '../utils/date';
 
 export default function DashboardPage() {
   const { allTransactions, selectedMonth, setSelectedMonth } = useStore();
@@ -20,11 +22,14 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `finance_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `finance_backup_${todayString()}.json`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Revoking immediately can cancel the download on some Android browsers.
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
   };
 
   const handleImport = (e) => {
@@ -33,14 +38,19 @@ export default function DashboardPage() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
+      let data;
       try {
-        const data = JSON.parse(event.target.result);
-        if (confirm('导入数据将覆盖当前所有数据，确定要继续吗？')) {
-          restoreAllStorageData(data);
-          window.location.reload();
-        }
+        data = JSON.parse(event.target.result);
+      } catch {
+        alert('文件格式错误：不是有效的 JSON 备份');
+        return;
+      }
+      if (!confirm('导入数据将覆盖当前所有数据，确定要继续吗？')) return;
+      try {
+        restoreAllStorageData(data);
+        window.location.reload();
       } catch (err) {
-        alert('文件格式错误！');
+        alert('导入失败：' + (err.message || '未知错误'));
       }
     };
     reader.readAsText(file);
@@ -48,6 +58,13 @@ export default function DashboardPage() {
   };
 
   // Derive stats for selected month OR year
+  const availableYears = useMemo(() => {
+    const years = new Set(allTransactions.map((t) => t.date?.slice(0, 4)).filter(Boolean));
+    years.add(String(new Date().getFullYear()));
+    years.add(selectedYear);
+    return [...years].sort().reverse();
+  }, [allTransactions, selectedYear]);
+
   const { totalIncome, totalExpense, totalNet, incomeTxns, expenseTxns } = useMemo(() => {
     let income = 0;
     let expense = 0;
@@ -57,7 +74,7 @@ export default function DashboardPage() {
     const prefix = viewMode === 'month' ? selectedMonth : selectedYear;
 
     allTransactions.forEach(t => {
-      if (t.date.startsWith(prefix)) {
+      if (t.date?.startsWith(prefix)) {
         if (t.type === 'income') {
           income += t.amount;
           iTxns.push(t);
@@ -78,12 +95,13 @@ export default function DashboardPage() {
   }, [allTransactions, selectedMonth, viewMode, selectedYear]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8 space-y-6">
       {/* Top Bar: View Picker & Actions */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
           <div className="flex bg-slate-100 p-1 rounded-xl">
             <button
+              type="button"
               onClick={() => setViewMode('month')}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'month' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -92,6 +110,7 @@ export default function DashboardPage() {
               <Calendar size={16} /> 月度
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('year')}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === 'year' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -104,27 +123,30 @@ export default function DashboardPage() {
           {viewMode === 'month' ? (
             <input
               type="month"
+              aria-label="选择月份"
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+              className="min-w-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           ) : (
-            <input
-              type="number"
+            <select
+              aria-label="选择年份"
               value={selectedYear}
               onChange={(e) => {
-                const year = e.target.value;
-                if (year.length <= 4) {
-                  const currentMonthStr = selectedMonth.split('-')[1];
-                  setSelectedMonth(`${year}-${currentMonthStr}`);
-                }
+                const currentMonthStr = selectedMonth.split('-')[1];
+                setSelectedMonth(`${e.target.value}-${currentMonthStr}`);
               }}
-              className="w-24 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
+              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>{y}年</option>
+              ))}
+            </select>
           )}
         </div>
         <div className="w-full sm:w-auto flex gap-2">
           <button
+            type="button"
             onClick={handleExport}
             className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-medium hover:bg-slate-200 transition-colors"
           >
@@ -134,7 +156,7 @@ export default function DashboardPage() {
             <Upload size={16} /> 导入
             <input
               type="file"
-              accept=".json"
+              accept=".json,application/json"
               className="hidden"
               onChange={handleImport}
             />
@@ -221,6 +243,15 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      {/* Every record of the selected period, tap to edit */}
+      <RecentTransactions
+        transactions={[...expenseTxns, ...incomeTxns]}
+        title={viewMode === 'month' ? '本月明细' : '本年度明细'}
+        limit={20}
+        sortByDate
+        hideWhenEmpty={false}
+      />
     </div>
   );
 }

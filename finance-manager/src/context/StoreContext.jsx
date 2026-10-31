@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import {
   getMainCategories,
   saveMainCategories,
@@ -8,6 +8,7 @@ import {
   saveTransactions,
   generateId,
 } from '../utils/storage';
+import { currentMonthString } from '../utils/date';
 
 const StoreContext = createContext(null);
 
@@ -20,10 +21,7 @@ export function StoreProvider({ children }) {
   const [currentMainCategoryId, setCurrentMainCategoryId] = useState(() => mainCategories[0]?.id);
   
   const [currentPage, setCurrentPage] = useState('entry'); // 'entry' | 'dashboard'
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthString());
 
   // Derived: filteredTransactions by selectedMonth
   const filteredTransactions = useMemo(
@@ -46,11 +44,12 @@ export function StoreProvider({ children }) {
   // ── Sub Category CRUD ───────────────────────────────────────────
 
   const addSubCategory = useCallback(
-    (mainId, name) => {
+    (mainId, name, note = '') => {
       const newSub = {
         id: generateId(),
         mainId,
         name,
+        note,
         createdAt: new Date().toISOString(),
       };
       const updated = [...subCategories, newSub];
