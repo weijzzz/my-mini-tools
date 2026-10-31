@@ -79,6 +79,21 @@ export function sortItems(items, mode, counts = new Map()) {
   return items;
 }
 
+/**
+ * Split an A→Z sorted list into sections by first letter:
+ * [{ letter: 'A', items: [...] }, { letter: 'B', items: [...] }, …]
+ */
+export function groupByInitial(items) {
+  const groups = [];
+  for (const item of items) {
+    const letter = initialOf(item.name);
+    const last = groups[groups.length - 1];
+    if (last && last.letter === letter) last.items.push(item);
+    else groups.push({ letter, items: [item] });
+  }
+  return groups;
+}
+
 export function filterByQuery(items, query) {
   const q = normalizeSearch(query);
   if (!q) return items;
