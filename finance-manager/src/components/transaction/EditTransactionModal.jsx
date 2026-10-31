@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import { useStore } from '../../context/StoreContext';
+import { evaluateAmount, isAllowedAmountInput } from '../../utils/amount';
 
 export default function EditTransactionModal({ isOpen, onClose, transaction }) {
   const { updateTransaction } = useStore();
@@ -22,10 +23,11 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!amount || isNaN(parseFloat(amount))) return;
+    const value = evaluateAmount(amount);
+    if (!(value > 0)) return;
 
     updateTransaction(transaction.id, {
-      amount: parseFloat(amount),
+      amount: value,
       date,
       note,
     });
@@ -41,12 +43,11 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
             金额 (€) *
           </label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             required
-            autoFocus
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => isAllowedAmountInput(e.target.value) && setAmount(e.target.value)}
             className={`w-full px-4 py-3 text-lg font-bold border border-slate-300 rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
               isIncome ? 'focus:ring-emerald-500 focus:border-emerald-500 text-emerald-600' : 'focus:ring-sky-500 focus:border-sky-500 text-sky-600'
             }`}
@@ -85,7 +86,8 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
         <div className="pt-2">
           <button
             type="submit"
-            className={`w-full py-3 px-4 text-white font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+            disabled={!(evaluateAmount(amount) > 0) || !date}
+            className={`w-full disabled:opacity-40 py-3 px-4 text-white font-medium rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
               isIncome 
                 ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500' 
                 : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-500'

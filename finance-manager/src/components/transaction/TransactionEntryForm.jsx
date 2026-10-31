@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Ban, Calendar } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
+import { todayString } from '../../utils/date';
 
 export default function TransactionEntryForm({ selectedSubId, onClear }) {
   const { addTransaction, subCategories, mainCategories } = useStore();
   
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().substring(0, 10));
+  const [date, setDate] = useState(() => todayString());
   const [note, setNote] = useState('');
 
   const selectedSub = subCategories.find(s => s.id === selectedSubId);
@@ -24,14 +26,16 @@ export default function TransactionEntryForm({ selectedSubId, onClear }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!amount || isNaN(parseFloat(amount))) return;
+    const value = evaluateAmount(amount);
+    if (!(value > 0)) return;
+    const expr = isAmountExpression(amount) ? amount.replace(/\s+/g, '') : '';
 
     addTransaction({
       mainId: selectedMain.id,
       subId: selectedSub.id,
-      amount: parseFloat(amount),
+      amount: value,
       date,
-      note,
+      note: [note.trim(), expr && `(计算: ${expr})`].filter(Boolean).join(' '),
     });
     
     // Trigger haptic feedback on success
@@ -43,7 +47,7 @@ export default function TransactionEntryForm({ selectedSubId, onClear }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up sticky bottom-4 z-20">
+    <div className="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-4 z-20">
       <div className={`${isIncome ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-sky-50 border-sky-100 text-sky-800'} px-4 py-3 border-b flex items-center justify-between`}>
         <div className="flex items-center gap-2">
           <span className="font-semibold text-lg">{selectedSub.name}</span>
@@ -52,6 +56,8 @@ export default function TransactionEntryForm({ selectedSubId, onClear }) {
           </span>
         </div>
         <button
+          type="button"
+          aria-label="取消录入"
           onClick={onClear}
           className={`p-1.5 rounded-full transition-colors ${isIncome ? 'text-emerald-500 hover:bg-emerald-200' : 'text-sky-500 hover:bg-sky-200'}`}
         >
@@ -66,15 +72,23 @@ export default function TransactionEntryForm({ selectedSubId, onClear }) {
               金额 (€)
             </label>
             <input
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              enterKeyHint="done"
+              aria-label="金额"
               required
               autoFocus
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => isAllowedAmountInput(e.target.value) && setAmount(e.target.value)}
               className={`w-full text-2xl font-bold px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:outline-none transition-shadow ${isIncome ? 'text-emerald-600 focus:ring-emerald-500 focus:border-emerald-500' : 'text-sky-600 focus:ring-sky-500 focus:border-sky-500'}`}
-              placeholder="0.00"
+              placeholder="0,00"
             />
+            {amount.trim() && !(evaluateAmount(amount) > 0) && (
+              <p className="mt-1 text-xs text-rose-500">格式不对，例如 12,50 或 10+5</p>
+            )}
+            {isAmountExpression(amount) && evaluateAmount(amount) > 0 && (
+              <p className="mt-1 text-xs text-slate-500">= €{evaluateAmount(amount).toFixed(2)}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-4">
@@ -111,7 +125,8 @@ export default function TransactionEntryForm({ selectedSubId, onClear }) {
 
         <button
           type="submit"
-          className={`w-full flex items-center justify-center gap-2 py-3.5 text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.98] ${
+          disabled={!(evaluateAmount(amount) > 0)}
+          className={`w-full flex disabled:opacity-40 items-center justify-center gap-2 py-3.5 text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.98] ${
             isIncome 
               ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20' 
               : 'bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 shadow-sky-500/20'

@@ -1,40 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Truck } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import Toast from '../ui/Toast';
-
-function getTodayString() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function getDefaultDateForMonth(monthStr) {
-  const currentMonthStr = getTodayString().substring(0, 7);
-  if (monthStr === currentMonthStr) {
-    return getTodayString();
-  }
-  return `${monthStr}-01`;
-}
+import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
+import { defaultDateForMonth } from '../../utils/date';
+import { readStoreValue, writeStoreValue } from '../../utils/storage';
 
 export default function BillEntryForm({ selectedSupplier }) {
-  const { categories, addBill, selectedMonth } = useStore();
+  const { categories, addBill, selectedMonth, currentStoreId } = useStore();
 
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [date, setDate] = useState(() => getDefaultDateForMonth(selectedMonth));
+  // Start with the category used last time in this store: most bills from a
+  // shop share one, so this saves a tap per bill.
+  const [category, setCategoryState] = useState(() => {
+    const last = readStoreValue(currentStoreId, 'last_category', '');
+    return categories.includes(last) ? last : '';
+  });
+  const setCategory = (cat) => {
+    setCategoryState(cat);
+    writeStoreValue(currentStoreId, 'last_category', cat);
+  };
+  const [date, setDate] = useState(() => defaultDateForMonth(selectedMonth));
   const [note, setNote] = useState('');
   const [toast, setToast] = useState({ message: '', type: 'success', isVisible: false });
 
-  React.useEffect(() => {
-    if (!date.startsWith(selectedMonth)) {
-      setDate(getDefaultDateForMonth(selectedMonth));
-    }
-  }, [selectedMonth, date]);
+  // Follow the month picker, but only when the month actually changes, so a
+  // date typed by hand is not overwritten on every render.
+  useEffect(() => {
+    setDate((d) => (d.startsWith(selectedMonth) ? d : defaultDateForMonth(selectedMonth)));
+  }, [selectedMonth]);
 
-  const canSubmit = selectedSupplier && amount && parseFloat(amount) > 0 && category;
+  const parsedAmount = evaluateAmount(amount);
+  const canSubmit = selectedSupplier && parsedAmount > 0 && category && date;
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type, isVisible: true });
@@ -42,8 +39,8 @@ export default function BillEntryForm({ selectedSupplier }) {
 
   const handleAmountChange = (e) => {
     const val = e.target.value;
-    // Allow digits, spaces, decimal point, plus, minus
-    if (/^[0-9\s.\-+]*$/.test(val)) {
+    // Digits, "," or "." as decimal mark, and + / - for quick sums.
+    if (isAllowedAmountInput(val)) {
       setAmount(val);
     }
   };
@@ -52,29 +49,12 @@ export default function BillEntryForm({ selectedSupplier }) {
     e.preventDefault();
     if (!canSubmit) return;
 
-    let finalAmount = 0;
-    let mathExpr = '';
-    const sanitized = amount.replace(/\s+/g, '');
-
-    try {
-      if (/[+\-]/.test(sanitized)) {
-        // Safe evaluation since we only allowed digits, dots, plus, minus
-        // eslint-disable-next-line no-new-func
-        finalAmount = new Function(`return ${sanitized}`)();
-        // Fix floating point precision issues for currency (e.g. 0.1 + 0.2 = 0.30000000000000004)
-        finalAmount = Math.round(finalAmount * 100) / 100;
-        mathExpr = sanitized;
-      } else {
-        finalAmount = parseFloat(sanitized);
-      }
-    } catch {
-      finalAmount = parseFloat(amount);
-    }
-
-    if (isNaN(finalAmount)) {
+    const finalAmount = parsedAmount;
+    if (Number.isNaN(finalAmount)) {
       showToast('金额计算错误，请检查输入格式', 'error');
       return;
     }
+    const mathExpr = isAmountExpression(amount) ? amount.replace(/\s+/g, '') : '';
 
     let finalNote = note.trim();
     if (mathExpr) {
@@ -118,9 +98,16 @@ export default function BillEntryForm({ selectedSupplier }) {
           inputMode="decimal"
           value={amount}
           onChange={handleAmountChange}
-          placeholder="输入金额"
-          className="w-full text-3xl md:text-4xl text-center font-semibold text-slate-800 bg-slate-50 rounded-xl p-4 border-b-2 border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 placeholder:text-slate-300 placeholder:font-normal transition-shadow"
+          placeholder="输入金额，如 12,50 或 10+5"
+          aria-label="金额"
+          className="w-full text-3xl md:text-4xl text-center font-semibold text-slate-800 bg-slate-50 rounded-xl p-4 border-b-2 border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 placeholder:text-slate-300 placeholder:font-normal placeholder:text-xl transition-shadow"
         />
+        {amount.trim() && Number.isNaN(parsedAmount) && (
+          <p className="mt-1.5 text-center text-xs text-rose-500">格式不对，例如 12,50 或 10+5</p>
+        )}
+        {isAmountExpression(amount) && parsedAmount > 0 && (
+          <p className="mt-1.5 text-center text-xs text-slate-500">= €{parsedAmount.toFixed(2)}</p>
+        )}
       </div>
 
       {/* Category Buttons */}
@@ -154,6 +141,7 @@ export default function BillEntryForm({ selectedSupplier }) {
           </label>
           <input
             type="date"
+            required
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-400 transition-colors"

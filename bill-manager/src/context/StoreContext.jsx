@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import {
   getStores,
   saveStores,
@@ -8,30 +8,48 @@ import {
   saveBills,
   getCategories,
   saveCategories,
+  getLastStoreId,
+  saveLastStoreId,
+  removeStoreData,
+  readPref,
+  writePref,
   generateId,
 } from '../utils/storage';
+import { currentMonthString } from '../utils/date';
 
 const StoreContext = createContext(null);
 
+function initialStoreId(stores) {
+  const last = getLastStoreId();
+  return stores.some((s) => s.id === last) ? last : stores[0]?.id;
+}
+
 export function StoreProvider({ children }) {
   const [stores, setStores] = useState(() => getStores());
-  const [currentStoreId, setCurrentStoreId] = useState(() => getStores()[0]?.id);
-  const [suppliers, setSuppliers] = useState([]);
-  const [bills, setBills] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [currentStoreId, setCurrentStoreId] = useState(() => initialStoreId(getStores()));
+  // Read synchronously so the first frame already shows this store's data.
+  const [suppliers, setSuppliers] = useState(() => getSuppliers(currentStoreId));
+  const [bills, setBills] = useState(() => getBills(currentStoreId));
+  const [categories, setCategories] = useState(() => getCategories(currentStoreId));
   const [currentPage, setCurrentPage] = useState('entry'); // 'entry' | 'dashboard'
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthString());
+  // How the supplier grid is ordered: 'name' (A→Z), 'frequent' or 'custom'.
+  const [supplierSort, setSupplierSortState] = useState(() => readPref('supplier_sort', 'name'));
 
-  // When currentStoreId changes, reload suppliers, bills, categories from storage
-  useEffect(() => {
-    if (!currentStoreId) return;
-    setSuppliers(getSuppliers(currentStoreId));
-    setBills(getBills(currentStoreId));
-    setCategories(getCategories(currentStoreId));
-  }, [currentStoreId]);
+  const setSupplierSort = useCallback((mode) => {
+    setSupplierSortState(mode);
+    writePref('supplier_sort', mode);
+  }, []);
+
+  // Swap every per-store list in the same render so no component ever sees
+  // one store's suppliers next to another store's bills.
+  const loadStore = useCallback((id) => {
+    setCurrentStoreId(id);
+    setSuppliers(getSuppliers(id));
+    setBills(getBills(id));
+    setCategories(getCategories(id));
+    saveLastStoreId(id);
+  }, []);
 
   // Derived: filteredBills by selectedMonth
   const filteredBills = useMemo(
@@ -71,31 +89,19 @@ export function StoreProvider({ children }) {
       const updated = stores.filter((s) => s.id !== id);
       if (updated.length === 0) return; // Prevent deleting the last store
 
-      // Remove this store's data from localStorage
-      const prefix = 'billmgr_';
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(`${prefix}${id}_`)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-
+      removeStoreData(id);
       setStores(updated);
       saveStores(updated);
 
       // Switch to the first remaining store if we deleted the current one
       if (currentStoreId === id) {
-        setCurrentStoreId(updated[0].id);
+        loadStore(updated[0].id);
       }
     },
-    [stores, currentStoreId]
+    [stores, currentStoreId, loadStore]
   );
 
-  const switchStore = useCallback((id) => {
-    setCurrentStoreId(id);
-  }, []);
+  const switchStore = loadStore;
 
   // ── Supplier CRUD ───────────────────────────────────────────
 
@@ -150,6 +156,21 @@ export function StoreProvider({ children }) {
     [suppliers, currentStoreId]
   );
 
+  /** Save a hand-picked supplier order (the array order is the custom order). */
+  const reorderSuppliers = useCallback(
+    (orderedIds) => {
+      const byId = new Map(suppliers.map((s) => [s.id, s]));
+      const next = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+      const placed = new Set(orderedIds);
+      suppliers.forEach((s) => {
+        if (!placed.has(s.id)) next.push(s);
+      });
+      setSuppliers(next);
+      saveSuppliers(currentStoreId, next);
+    },
+    [suppliers, currentStoreId]
+  );
+
   // ── Bill CRUD ───────────────────────────────────────────────
 
   const addBill = useCallback(
@@ -197,6 +218,25 @@ export function StoreProvider({ children }) {
     [bills, currentStoreId]
   );
 
+  /** Move several bills to another date in one save. Returns how many moved. */
+  const moveBillsToDate = useCallback(
+    (ids, date) => {
+      const set = new Set(ids);
+      let moved = 0;
+      const updated = bills.map((b) => {
+        if (!set.has(b.id) || b.date === date) return b;
+        moved += 1;
+        return { ...b, date };
+      });
+      if (moved > 0) {
+        setBills(updated);
+        saveBills(currentStoreId, updated);
+      }
+      return moved;
+    },
+    [bills, currentStoreId]
+  );
+
   // ── Category CRUD ───────────────────────────────────────────
 
   const updateCategories = useCallback(
@@ -234,7 +274,11 @@ export function StoreProvider({ children }) {
       addBill,
       updateBill,
       deleteBill,
+      moveBillsToDate,
       updateCategories,
+      supplierSort,
+      setSupplierSort,
+      reorderSuppliers,
     }),
     [
       stores,
@@ -256,7 +300,11 @@ export function StoreProvider({ children }) {
       addBill,
       updateBill,
       deleteBill,
+      moveBillsToDate,
       updateCategories,
+      supplierSort,
+      setSupplierSort,
+      reorderSuppliers,
     ]
   );
 

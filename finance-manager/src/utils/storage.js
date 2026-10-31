@@ -9,20 +9,42 @@ function readKey(key) {
   }
 }
 
+let quotaWarned = false;
+
 function writeKey(key, value) {
-  localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+  try {
+    localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    // Storage full or blocked: say so once instead of silently losing data.
+    console.error('[storage] write failed', key, err);
+    if (!quotaWarned) {
+      quotaWarned = true;
+      alert('保存失败：手机浏览器存储空间不足或被禁用。请先导出备份再清理。');
+    }
+    return false;
+  }
 }
 
 export function generateId() {
-  return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// Small UI settings (sort mode…), included in backups like everything else.
+export function readPref(key, fallback) {
+  return readKey(`pref_${key}`) ?? fallback;
+}
+
+export function writePref(key, value) {
+  writeKey(`pref_${key}`, value);
 }
 
 // ── Main Categories (Tabs) ──
 const DEFAULT_MAIN_CATEGORIES = [
-  { id: 'cat_food', name: '餐饮', type: 'expense' },
-  { id: 'cat_trans', name: '交通', type: 'expense' },
-  { id: 'cat_shop', name: '购物', type: 'expense' },
-  { id: 'cat_income', name: '收入', type: 'income' },
+  { id: 'cat_food', name: '餐饮', type: 'expense', icon: 'Utensils' },
+  { id: 'cat_trans', name: '交通', type: 'expense', icon: 'Car' },
+  { id: 'cat_shop', name: '购物', type: 'expense', icon: 'ShoppingBag' },
+  { id: 'cat_income', name: '收入', type: 'income', icon: 'Wallet' },
 ];
 
 export function getMainCategories() {
@@ -58,7 +80,7 @@ export function getAllStorageData() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key.startsWith(PREFIX)) {
+    if (key && key.startsWith(PREFIX)) {
       try {
         data[key] = JSON.parse(localStorage.getItem(key));
       } catch {
@@ -70,10 +92,17 @@ export function getAllStorageData() {
 }
 
 export function restoreAllStorageData(data) {
+  // Check the file before wiping anything: a backup from another app would
+  // otherwise delete every record and restore nothing.
+  const hasOwnKeys = Object.keys(data || {}).some((key) => key.startsWith(PREFIX));
+  if (!hasOwnKeys) {
+    throw new Error('这不是「个人记账本」的备份文件');
+  }
+
   const keysToRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key.startsWith(PREFIX)) {
+    if (key && key.startsWith(PREFIX)) {
       keysToRemove.push(key);
     }
   }

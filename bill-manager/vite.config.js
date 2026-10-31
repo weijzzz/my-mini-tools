@@ -4,33 +4,37 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Relative asset paths: the same build works at a domain root or in a
+  // sub-folder such as https://weijzzz.github.io/my-mini-tools/bill-manager/
+  base: './',
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      // Icons are bundled locally so installing and opening the app works offline.
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: '账单管家',
         short_name: '账单管家',
         description: '轻量极速的账单录入与月度统计工具',
-        theme_color: '#0f172a', // slate-900 for top bar
-        background_color: '#f8fafc', // slate-50 for background
+        lang: 'zh-CN',
+        theme_color: '#0f172a',
+        background_color: '#f8fafc',
         display: 'standalone',
         orientation: 'portrait',
+        start_url: '.',
+        scope: '.',
         icons: [
-          {
-            src: 'https://cdn-icons-png.flaticon.com/512/10336/10336829.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'https://cdn-icons-png.flaticon.com/512/10336/10336829.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    })
+          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        cleanupOutdatedCaches: true,
+      },
+    }),
   ],
 })

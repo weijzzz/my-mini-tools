@@ -1,7 +1,22 @@
 "use client";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const API_BASE = "http://localhost:8001";
+/**
+ * Where the FastAPI backend lives.
+ *
+ * "localhost" only works on the computer running the backend: on a phone it
+ * points at the phone itself. Default to the same host that served this page
+ * (e.g. http://192.168.1.20:3000 -> http://192.168.1.20:8001), and allow an
+ * override with NEXT_PUBLIC_API_BASE for a deployed backend.
+ */
+function getApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_BASE) return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, "");
+  if (typeof window === "undefined") return "http://localhost:8001";
+  return `${window.location.protocol}//${window.location.hostname}:8001`;
+}
+
+const RECENT_KEY = "gc-prices:recent";
+const SEARCH_TIMEOUT_MS = 150_000;
 
 const STORES = ["Mercadona", "HiperDino", "Carrefour", "Spar"] as const;
 
@@ -48,6 +63,9 @@ interface ApiResponse {
   total_groups: number;
   grouped_results: GroupedResult[];
   data: Product[];
+  /** Per store: number of items, or "error" / "timeout". Newer backends only. */
+  store_status?: Record<string, number | string>;
+  cached?: boolean;
 }
 
 // ─── Subcomponents ───
@@ -79,26 +97,36 @@ function ProductImage({ product }: { product: Product | null }) {
   );
 }
 
-function PriceCell({ product }: { product: Product | null }) {
+function StoreLabel({ store }: { store: string }) {
+  // Only shown in the phone layout, where the column headers are hidden.
+  return (
+    <div className="matrix-store-label">
+      <span className="store-dot" style={{ background: STORE_COLORS[store] }} />
+      {store}
+    </div>
+  );
+}
+
+function PriceCell({ product, store }: { product: Product | null; store: string }) {
   if (!product) {
     return (
       <div className="matrix-cell matrix-cell--empty">
+        <StoreLabel store={store} />
         <span className="text-[var(--text-muted)] text-sm">No listing</span>
       </div>
     );
   }
 
   return (
-    <div className="matrix-cell group">
+    <div className="matrix-cell">
+      <StoreLabel store={store} />
       <div className="flex flex-col gap-2">
-        {/* Sale tag */}
         {product.is_on_sale && (
           <div className="animate-slide-in">
             <span className="sale-tag animate-pulse-sale">🔥 SALE</span>
           </div>
         )}
 
-        {/* Price area */}
         <div className="flex items-baseline gap-2 flex-wrap">
           {product.is_on_sale && product.original_price && (
             <span className="price-original">{product.original_price}</span>
@@ -108,22 +136,9 @@ function PriceCell({ product }: { product: Product | null }) {
           </span>
         </div>
 
-        {/* Unit price */}
         {product.unit_price && (
-          <span className="text-xs text-[var(--text-muted)] font-medium">
-            {product.unit_price}
-          </span>
+          <span className="text-xs text-[var(--text-muted)] font-medium">{product.unit_price}</span>
         )}
-
-        {/* Location */}
-        <div className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <div className="text-[10px] text-[var(--text-muted)] truncate max-w-[140px]" title={product.nearest_branch}>
-            📍 {product.nearest_branch}
-          </div>
-          <div className="text-[11px] text-[var(--accent-indigo)] font-bold">
-            🚗 ~{product.distance_km} km
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -161,9 +176,12 @@ function StatsBar({ data }: { data: ApiResponse }) {
   const storeCount = STORES.filter(
     (s) => data.grouped_results.some((g) => g.products[s] !== null)
   ).length;
+  const failedStores = Object.entries(data.store_status ?? {})
+    .filter(([, v]) => typeof v === "string")
+    .map(([store]) => store);
 
   return (
-    <div className="flex flex-wrap gap-4 items-center text-sm text-[var(--text-secondary)]">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 items-center text-sm text-[var(--text-secondary)]">
       <div className="flex items-center gap-2">
         <div className="w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
         <span><strong className="text-[var(--text-primary)]">{data.total_results}</strong> products</span>
@@ -176,8 +194,15 @@ function StatsBar({ data }: { data: ApiResponse }) {
         <div className="w-2 h-2 rounded-full bg-[var(--accent-indigo)]" />
         <span><strong className="text-[var(--text-primary)]">{storeCount}</strong> stores responding</span>
       </div>
+      {failedStores.length > 0 && (
+        <div className="flex items-center gap-2 text-[var(--sale-red)]">
+          <div className="w-2 h-2 rounded-full bg-[var(--sale-red)]" />
+          <span>No response: {failedStores.join(", ")}</span>
+        </div>
+      )}
+      {data.cached && <span className="text-xs text-[var(--text-muted)]">(cached)</span>}
       {data.grouped_results.length > 0 && (
-        <div className="ml-auto text-xs font-medium text-[var(--text-muted)]">
+        <div className="sm:ml-auto text-xs font-medium text-[var(--text-muted)]">
           Best price: <span className="text-[var(--mercadona)] font-bold">€{data.grouped_results[0]?.group_cheapest_price?.toFixed(2)}</span>
         </div>
       )}
@@ -193,33 +218,76 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState("");
+  const [recent, setRecent] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Typing on a phone is slow: keep the last few searches as one-tap chips.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      if (Array.isArray(saved)) setRecent(saved.filter((x) => typeof x === "string").slice(0, 8));
+    } catch {
+      /* storage unavailable: no chips */
+    }
+  }, []);
+
+  const remember = (q: string) => {
+    setRecent((prev) => {
+      const next = [q, ...prev.filter((x) => x.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const handleSearch = async (e?: React.FormEvent, overrideQuery?: string) => {
     if (e) e.preventDefault();
-    const q = overrideQuery || query;
-    if (!q) return;
+    const q = (overrideQuery ?? query).trim();
+    if (q.length < 2) return;
 
+    // A new search cancels the previous one instead of racing it.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+
+    (document.activeElement as HTMLElement | null)?.blur?.(); // close the phone keyboard
     setLoading(true);
     setError("");
     setData(null);
+    const apiBase = getApiBase();
 
     try {
       const res = await fetch(
-        `${API_BASE}/api/search?q=${encodeURIComponent(q)}&zip_code=${zip}`
+        `${apiBase}/api/search?q=${encodeURIComponent(q)}&zip_code=${encodeURIComponent(zip.trim() || "35001")}`,
+        { signal: controller.signal }
       );
-      if (!res.ok) throw new Error("Search failed to reach the server.");
+      if (!res.ok) throw new Error(`Search failed (HTTP ${res.status}).`);
       const json: ApiResponse = await res.json();
       setData(json);
-    } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+      remember(q);
+    } catch (err: unknown) {
+      if (controller.signal.aborted && abortRef.current !== controller) return; // superseded
+      if (controller.signal.aborted) {
+        setError("The search took too long. Try again, or try a shorter product name.");
+      } else if (err instanceof TypeError) {
+        setError(`Can't reach the backend at ${apiBase}. Is it running and reachable from this device?`);
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
     } finally {
-      setLoading(false);
+      clearTimeout(timer);
+      if (abortRef.current === controller) setLoading(false);
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same photo again
     if (!file) return;
 
     setLoading(true);
@@ -229,7 +297,7 @@ export default function Home() {
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${API_BASE}/api/process-image`, {
+      const res = await fetch(`${getApiBase()}/api/process-image`, {
         method: "POST",
         body: formData,
       });
@@ -239,8 +307,8 @@ export default function Home() {
       const newQuery = `${imgData.brand} ${imgData.name} ${imgData.weight}`.trim();
       setQuery(newQuery);
       await handleSearch(undefined, newQuery);
-    } catch (err: any) {
-      setError(err.message || "Failed to process image.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to process image.");
       setLoading(false);
     }
   };
@@ -270,17 +338,17 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen p-4 md:p-8" style={{ background: "var(--bg-primary)" }}>
-      <div className="max-w-[1400px] mx-auto space-y-8">
+    <main className="min-h-screen p-4 md:p-8" style={{ background: "var(--bg-primary)", paddingTop: "max(1rem, env(safe-area-inset-top))" }}>
+      <div className="max-w-[1400px] mx-auto space-y-6 md:space-y-8">
 
         {/* ── Header ── */}
-        <header className="text-center space-y-4 pt-8 pb-4">
+        <header className="text-center space-y-3 pt-2 md:pt-8 pb-2 md:pb-4">
           <div className="flex items-center justify-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center text-white text-xl font-black shadow-lg">
               C
             </div>
           </div>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-5xl font-black tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
             Gran Canaria Price Comparator
           </h1>
           <p className="text-[var(--text-secondary)] font-medium max-w-2xl mx-auto text-base leading-relaxed">
@@ -293,7 +361,7 @@ export default function Home() {
 
         {/* ── Search Bar ── */}
         <div
-          className="rounded-2xl p-5 max-w-3xl mx-auto border"
+          className="rounded-2xl p-4 md:p-5 max-w-3xl mx-auto border"
           style={{
             background: "var(--bg-secondary)",
             borderColor: "var(--border)",
@@ -303,7 +371,9 @@ export default function Home() {
             <div className="flex-1">
               <input
                 id="search-query"
-                type="text"
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search products (e.g., Cerveza Tropical)..."
@@ -312,10 +382,14 @@ export default function Home() {
               />
             </div>
 
-            <div className="w-full md:w-32">
+            <div className="flex gap-3 md:contents">
+            <div className="w-28 md:w-32 shrink-0">
               <input
                 id="search-zip"
                 type="text"
+                inputMode="numeric"
+                maxLength={5}
+                aria-label="Postal code"
                 value={zip}
                 onChange={(e) => setZip(e.target.value)}
                 placeholder="Postal"
@@ -327,8 +401,8 @@ export default function Home() {
             <button
               id="search-submit"
               type="submit"
-              className="px-7 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-base font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 cursor-pointer disabled:cursor-not-allowed"
-              disabled={loading || !query}
+              className="flex-1 md:flex-none px-7 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-base font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 cursor-pointer disabled:cursor-not-allowed"
+              disabled={loading || query.trim().length < 2}
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -353,6 +427,7 @@ export default function Home() {
                 onChange={handleFileUpload}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 title="Upload Product Photo"
+                aria-label="Search by product photo"
                 disabled={loading}
               />
               <div
@@ -369,7 +444,27 @@ export default function Home() {
                 </svg>
               </div>
             </div>
+            </div>
           </form>
+
+          {recent.length > 0 && !loading && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {recent.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setQuery(r);
+                    handleSearch(undefined, r);
+                  }}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold border text-[var(--text-secondary)] hover:text-[var(--text-primary)] active:scale-95 transition"
+                  style={{ borderColor: "var(--border-hover)" }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
 
           {error && (
             <p className="text-[var(--sale-red)] mt-4 text-center font-semibold text-sm animate-pulse">
@@ -418,9 +513,9 @@ export default function Home() {
 
                   return (
                     <div
-                      key={idx}
+                      key={`${group.spec_key}-${idx}`}
                       className="matrix-row animate-fade-in-up"
-                      style={{ animationDelay: `${idx * 60}ms` }}
+                      style={{ animationDelay: `${Math.min(idx, 10) * 60}ms` }}
                     >
                       {/* Product Info Column */}
                       <div className="matrix-cell matrix-cell--product">
@@ -452,7 +547,7 @@ export default function Home() {
                         const product = group.products[store];
                         const isCheapest = cheapestStore === store && product !== null;
                         return (
-                          <div key={store} className="relative">
+                          <div key={store} className="relative matrix-store">
                             {isCheapest && (
                               <div
                                 className="absolute top-2 right-2 text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded"
@@ -464,7 +559,7 @@ export default function Home() {
                                 Cheapest
                               </div>
                             )}
-                            <PriceCell product={product} />
+                            <PriceCell product={product} store={store} />
                           </div>
                         );
                       })}
@@ -493,7 +588,6 @@ export default function Home() {
         <footer className="text-center py-8 text-xs text-[var(--text-muted)]">
           <p>
             Prices scraped in real-time from Mercadona, HiperDino, Carrefour & Spar.
-            Distances are approximate.
           </p>
         </footer>
       </div>

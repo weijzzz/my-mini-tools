@@ -129,11 +129,12 @@ export default function StoreManager({ isOpen, onClose }) {
                   <span className="flex-1 text-sm text-slate-700 truncate">
                     {store.name}
                   </span>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => startEditing(store)}
-                      className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-md cursor-pointer transition-colors"
+                      className="p-2.5 md:p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-md cursor-pointer transition-colors"
                       title="重命名"
+                      aria-label={`重命名 ${store.name}`}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -143,12 +144,13 @@ export default function StoreManager({ isOpen, onClose }) {
                         setDeleteTarget(store);
                       }}
                       disabled={stores.length <= 1}
-                      className={`p-1.5 rounded-md cursor-pointer transition-colors ${
+                      className={`p-2.5 md:p-1.5 rounded-md cursor-pointer transition-colors ${
                         stores.length <= 1
                           ? 'text-slate-200 cursor-not-allowed'
                           : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
                       }`}
                       title={stores.length <= 1 ? '至少保留一个店面' : '删除'}
+                      aria-label={`删除 ${store.name}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

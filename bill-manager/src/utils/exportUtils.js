@@ -1,6 +1,7 @@
-import * as XLSX from 'xlsx';
-
-export function exportToExcel(bills, filename = '账单导出') {
+// SheetJS is ~400 KB, so it is only downloaded the first time someone exports
+// to Excel instead of slowing down every app start on the phone.
+export async function exportToExcel(bills, filename = '账单导出') {
+  const XLSX = await import('xlsx');
   const rows = bills.map((bill) => ({
     日期: bill.date || '',
     供货商: bill.supplierName || '',

@@ -125,8 +125,9 @@ export default function SubCategoryDetailModal({ isOpen, onClose, subCategory })
                           
                           {/* Delete button */}
                           <button
+                            type="button"
                             onClick={(e) => handleDelete(e, txn.id, txn.date)}
-                            className="text-xs text-slate-300 hover:text-red-500 transition-colors p-1"
+                            className="text-xs text-slate-400 hover:text-red-500 active:text-red-500 transition-colors px-2 py-2.5 -my-2"
                             title="删除此记录"
                           >
                             删除

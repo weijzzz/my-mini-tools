@@ -1,16 +1,23 @@
-# React + Vite
+# 个人记账本 (finance-manager)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+个人收支记账的手机 PWA，数据只存在本机浏览器（localStorage）。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- 大分类（餐饮 / 交通 / 购物 / 收入…，可自己加）+ 具体项目卡片
+- 点项目卡片 → 输金额记一笔；金额支持 `12,50` 和 `10+5,20` 这样的加减算式
+- ⚡ 极速录入：卡片左上角闪电，只输金额，日期记为今天
+- 长按项目卡片：看这个项目的历史明细，点一条就能改
+- 统计：月度 / 年度的支出、收入、结余，趋势图、分类占比，以及当期全部明细
+- JSON 备份导出 / 导入（导入前会确认，且会拒绝其他 App 的备份文件）
 
-## React Compiler
+## 开发
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+npm run build    # 生成 dist/
+npm run lint
+```
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+> 数据只在这台手机的这个浏览器里，换手机或清浏览器数据前先在「统计」页点「导出」。

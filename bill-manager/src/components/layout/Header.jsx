@@ -13,8 +13,8 @@ export default function Header({ onOpenStoreManager }) {
         setDropdownOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, []);
 
   const handleSwitchStore = (storeId) => {
@@ -28,7 +28,7 @@ export default function Header({ onOpenStoreManager }) {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-gradient-to-r from-slate-800 to-slate-900 text-white backdrop-blur-md border-b border-slate-700/50 shadow-[0_1px_12px_rgba(0,0,0,0.25)]">
+    <header style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} className="sticky top-0 z-40 bg-gradient-to-r from-slate-800 to-slate-900 text-white backdrop-blur-md border-b border-slate-700/50 shadow-[0_1px_12px_rgba(0,0,0,0.25)]">
       <div className="max-w-6xl mx-auto flex items-center justify-between h-[52px] md:h-[60px] px-3 md:px-5">
         {/* Left: Logo */}
         <div className="flex items-center gap-2 shrink-0">
@@ -56,7 +56,7 @@ export default function Header({ onOpenStoreManager }) {
           </button>
 
           {dropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 z-50">
+            <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-slide-down z-50">
               <div className="max-h-52 overflow-y-auto py-1">
                 {stores.map((store) => (
                   <button
@@ -89,8 +89,9 @@ export default function Header({ onOpenStoreManager }) {
         <div className="shrink-0">
           <input
             type="month"
+            aria-label="选择月份"
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
+            onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
             className="bg-slate-700/60 hover:bg-slate-700 text-white text-xs md:text-sm rounded-lg border-0 px-2 md:px-3 py-1.5 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/50 [color-scheme:dark]"
           />
         </div>

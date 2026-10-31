@@ -17,12 +17,62 @@ function readKey(key) {
   }
 }
 
+let quotaWarned = false;
+
 function writeKey(key, value) {
-  localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+  try {
+    localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    // Storage full or blocked (e.g. private mode). Tell the user once instead
+    // of failing silently and losing what they just typed.
+    console.error('[storage] write failed', key, err);
+    if (!quotaWarned) {
+      quotaWarned = true;
+      alert('保存失败：手机浏览器存储空间不足或被禁用。请先「备份数据」再清理。');
+    }
+    return false;
+  }
 }
 
 export function generateId() {
-  return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// Small settings: global ("pref_*") or per store ("{storeId}_*", removed
+// together with the store).
+export function readPref(key, fallback) {
+  return readKey(`pref_${key}`) ?? fallback;
+}
+
+export function writePref(key, value) {
+  writeKey(`pref_${key}`, value);
+}
+
+export function readStoreValue(storeId, key, fallback) {
+  return readKey(`${storeId}_${key}`) ?? fallback;
+}
+
+export function writeStoreValue(storeId, key, value) {
+  writeKey(`${storeId}_${key}`, value);
+}
+
+// Remember which store was open so reopening the app lands on it again.
+export function getLastStoreId() {
+  return readKey('current_store');
+}
+
+export function saveLastStoreId(storeId) {
+  writeKey('current_store', storeId);
+}
+
+export function removeStoreData(storeId) {
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(`${PREFIX}${storeId}_`)) keysToRemove.push(key);
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
 }
 
 export function getStores() {
@@ -70,7 +120,7 @@ export function getAllStorageData() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key.startsWith(PREFIX)) {
+    if (key && key.startsWith(PREFIX)) {
       try {
         data[key] = JSON.parse(localStorage.getItem(key));
       } catch {
@@ -82,11 +132,18 @@ export function getAllStorageData() {
 }
 
 export function restoreAllStorageData(data) {
+  // Refuse a file from another app before wiping anything: clearing first and
+  // then finding nothing to restore would silently delete every bill.
+  const hasOwnKeys = Object.keys(data || {}).some((key) => key.startsWith(PREFIX));
+  if (!hasOwnKeys) {
+    throw new Error('这不是「账单管家」的备份文件');
+  }
+
   // Clear all existing billmgr_ keys
   const keysToRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key.startsWith(PREFIX)) {
+    if (key && key.startsWith(PREFIX)) {
       keysToRemove.push(key);
     }
   }

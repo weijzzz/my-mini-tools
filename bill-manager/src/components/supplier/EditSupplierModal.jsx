@@ -17,8 +17,10 @@ export default function EditSupplierModal({ isOpen, onClose, supplier, onDeleted
       setNote(supplier.note || '');
       setError('');
       setShowConfirmDelete(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
+      const t = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
+    return undefined;
   }, [isOpen, supplier]);
 
   const validate = (value) => {
