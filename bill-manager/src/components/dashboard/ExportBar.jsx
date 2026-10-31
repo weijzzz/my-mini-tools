@@ -1,14 +1,22 @@
-import React, { useRef } from 'react';
-import { HardDrive, FileSpreadsheet, FileText, Download, Upload } from 'lucide-react';
-import { useStore } from '../../context/StoreContext';
+import React, { useRef, useState } from 'react';
+import { HardDrive, FileSpreadsheet, FileText, Download, Upload, Loader2 } from 'lucide-react';
 import { exportToExcel, exportToCSV } from '../../utils/exportUtils';
 import { exportBackup, importBackup } from '../../utils/backupUtils';
 
 export default function ExportBar({ billsToExport, exportLabel }) {
   const fileInputRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
 
-  const handleExportExcel = () => {
-    exportToExcel(billsToExport || [], exportLabel);
+  const handleExportExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportToExcel(billsToExport || [], exportLabel);
+    } catch (err) {
+      alert('导出失败: ' + (err.message || '未知错误'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -26,6 +34,10 @@ export default function ExportBar({ billsToExport, exportLabel }) {
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!confirm('导入备份会覆盖当前所有店面的数据，确定继续吗？')) {
+      e.target.value = '';
+      return;
+    }
     try {
       await importBackup(file);
       window.location.reload();
@@ -39,8 +51,8 @@ export default function ExportBar({ billsToExport, exportLabel }) {
 
   const buttons = [
     {
-      label: '导出 Excel',
-      icon: FileSpreadsheet,
+      label: exporting ? '生成中…' : '导出 Excel',
+      icon: exporting ? Loader2 : FileSpreadsheet,
       onClick: handleExportExcel,
       className: 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white',
     },
@@ -76,11 +88,12 @@ export default function ExportBar({ billsToExport, exportLabel }) {
           const Icon = btn.icon;
           return (
             <button
+              type="button"
               key={btn.label}
               onClick={btn.onClick}
-              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium text-sm transition-all shadow-sm hover:shadow ${btn.className}`}
+              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 md:py-2.5 font-medium text-sm transition-all shadow-sm hover:shadow ${btn.className}`}
             >
-              <Icon size={18} />
+              <Icon size={18} className={Icon === Loader2 ? 'animate-spin' : ''} />
               <span>{btn.label}</span>
             </button>
           );
@@ -90,7 +103,7 @@ export default function ExportBar({ billsToExport, exportLabel }) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json"
+        accept=".json,application/json"
         onChange={handleFileChange}
         className="hidden"
       />

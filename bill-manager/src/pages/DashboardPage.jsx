@@ -30,12 +30,13 @@ export default function DashboardPage() {
   const exportLabel = viewMode === 'year' ? selectedYear : selectedMonth;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
+    <div className="max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
       
       {/* Top Toggle & Year Picker */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 md:mb-8">
         <div className="bg-slate-200/60 p-1 rounded-xl flex items-center w-full sm:w-auto">
           <button 
+            type="button"
             onClick={() => setViewMode('month')}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${viewMode === 'month' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
           >
@@ -43,6 +44,7 @@ export default function DashboardPage() {
             月度视图
           </button>
           <button 
+            type="button"
             onClick={() => setViewMode('year')}
             className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${viewMode === 'year' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
           >
@@ -64,7 +66,7 @@ export default function DashboardPage() {
 
       <div className="space-y-6 md:space-y-8">
         {/* KPI Cards */}
-        <StatCards bills={displayBills} dateLabel={dateLabel} />
+        <StatCards bills={displayBills} dateLabel={dateLabel} isYear={viewMode === 'year'} />
 
         {/* Monthly Trend Chart (Only for year view) */}
         {viewMode === 'year' && (

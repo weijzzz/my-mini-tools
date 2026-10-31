@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { UserPlus, Download, CheckCircle2, Plus } from 'lucide-react';
+import { Download, Plus } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import Modal from '../ui/Modal';
 import { getSuppliers } from '../../utils/storage';
@@ -22,8 +22,10 @@ export default function AddSupplierModal({ isOpen, onClose, onSupplierAdded }) {
       setName('');
       setError('');
       setImportStoreId(otherStores.length > 0 ? otherStores[0].id : '');
-      setTimeout(() => inputRef.current?.focus(), 100);
+      const t = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
+    return undefined;
   }, [isOpen, otherStores]);
 
   useEffect(() => {

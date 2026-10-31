@@ -6,7 +6,7 @@ import BillEntryForm from '../components/bill/BillEntryForm';
 import BillList from '../components/bill/BillList';
 
 export default function EntryPage() {
-  const { suppliers, bills, addBill, updateBill, deleteBill } = useStore();
+  const { bills } = useStore();
   const [selectedSupplier, setSelectedSupplier] = useState(null);
 
   const handleSelectSupplier = (supplier) => {
@@ -14,7 +14,7 @@ export default function EntryPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
+    <div className="max-w-4xl mx-auto px-4 py-6 md:px-6 md:py-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-8">
       <div className="space-y-6 md:space-y-8">
         {/* Supplier Selection */}
         <section>

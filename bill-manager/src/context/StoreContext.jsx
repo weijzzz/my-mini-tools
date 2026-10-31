@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import {
   getStores,
   saveStores,
@@ -8,30 +8,39 @@ import {
   saveBills,
   getCategories,
   saveCategories,
+  getLastStoreId,
+  saveLastStoreId,
+  removeStoreData,
   generateId,
 } from '../utils/storage';
+import { currentMonthString } from '../utils/date';
 
 const StoreContext = createContext(null);
 
+function initialStoreId(stores) {
+  const last = getLastStoreId();
+  return stores.some((s) => s.id === last) ? last : stores[0]?.id;
+}
+
 export function StoreProvider({ children }) {
   const [stores, setStores] = useState(() => getStores());
-  const [currentStoreId, setCurrentStoreId] = useState(() => getStores()[0]?.id);
-  const [suppliers, setSuppliers] = useState([]);
-  const [bills, setBills] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [currentStoreId, setCurrentStoreId] = useState(() => initialStoreId(getStores()));
+  // Read synchronously so the first frame already shows this store's data.
+  const [suppliers, setSuppliers] = useState(() => getSuppliers(currentStoreId));
+  const [bills, setBills] = useState(() => getBills(currentStoreId));
+  const [categories, setCategories] = useState(() => getCategories(currentStoreId));
   const [currentPage, setCurrentPage] = useState('entry'); // 'entry' | 'dashboard'
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthString());
 
-  // When currentStoreId changes, reload suppliers, bills, categories from storage
-  useEffect(() => {
-    if (!currentStoreId) return;
-    setSuppliers(getSuppliers(currentStoreId));
-    setBills(getBills(currentStoreId));
-    setCategories(getCategories(currentStoreId));
-  }, [currentStoreId]);
+  // Swap every per-store list in the same render so no component ever sees
+  // one store's suppliers next to another store's bills.
+  const loadStore = useCallback((id) => {
+    setCurrentStoreId(id);
+    setSuppliers(getSuppliers(id));
+    setBills(getBills(id));
+    setCategories(getCategories(id));
+    saveLastStoreId(id);
+  }, []);
 
   // Derived: filteredBills by selectedMonth
   const filteredBills = useMemo(
@@ -71,31 +80,19 @@ export function StoreProvider({ children }) {
       const updated = stores.filter((s) => s.id !== id);
       if (updated.length === 0) return; // Prevent deleting the last store
 
-      // Remove this store's data from localStorage
-      const prefix = 'billmgr_';
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(`${prefix}${id}_`)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((key) => localStorage.removeItem(key));
-
+      removeStoreData(id);
       setStores(updated);
       saveStores(updated);
 
       // Switch to the first remaining store if we deleted the current one
       if (currentStoreId === id) {
-        setCurrentStoreId(updated[0].id);
+        loadStore(updated[0].id);
       }
     },
-    [stores, currentStoreId]
+    [stores, currentStoreId, loadStore]
   );
 
-  const switchStore = useCallback((id) => {
-    setCurrentStoreId(id);
-  }, []);
+  const switchStore = loadStore;
 
   // ── Supplier CRUD ───────────────────────────────────────────
 

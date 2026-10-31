@@ -10,6 +10,7 @@ import {
 import { useStore } from '../../context/StoreContext';
 import Modal from '../ui/Modal';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { evaluateAmount, formatEuro, isAllowedAmountInput } from '../../utils/amount';
 
 export default function BillList({ bills = [], limit, showTitle = true }) {
   const { categories, suppliers, updateBill, deleteBill } = useStore();
@@ -24,7 +25,8 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
     return [...bills].sort((a, b) => {
       const dateCmp = (b.date || '').localeCompare(a.date || '');
       if (dateCmp !== 0) return dateCmp;
-      return (b.createdAt || 0) - (a.createdAt || 0);
+      // createdAt is an ISO string, so compare it as text (newest first).
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
     });
   }, [bills]);
 
@@ -46,7 +48,7 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
 
   const handleEditChange = (field, value) => {
     if (field === 'amount') {
-      if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+      if (isAllowedAmountInput(value)) {
         setEditForm((f) => ({ ...f, [field]: value }));
       }
       return;
@@ -57,8 +59,10 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
   const saveEdit = () => {
     if (!editingBill) return;
     const supplier = suppliers.find((s) => s.id === editForm.supplierId);
+    const amount = evaluateAmount(editForm.amount);
+    if (!(amount > 0)) return;
     updateBill(editingBill.id, {
-      amount: parseFloat(editForm.amount) || 0,
+      amount,
       category: editForm.category,
       date: editForm.date,
       note: editForm.note.trim(),
@@ -75,7 +79,7 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
     }
   };
 
-  const formatAmount = (val) => `€${Number(val).toFixed(2)}`;
+  const formatAmount = formatEuro;
 
   if (sortedBills.length === 0) {
     return (
@@ -181,21 +185,25 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
             </div>
             {/* Third line: note + actions */}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400 truncate max-w-[60%]">
+              <span className="text-xs text-slate-400 truncate min-w-0 flex-1">
                 {bill.note || ''}
               </span>
               <div className="flex items-center gap-0.5">
                 <button
+                  type="button"
                   onClick={() => openEdit(bill)}
-                  className="p-1.5 text-slate-400 hover:text-teal-600 rounded-md cursor-pointer"
+                  aria-label="编辑"
+                  className="p-2.5 -my-1 text-slate-400 active:text-teal-600 active:bg-teal-50 rounded-lg cursor-pointer"
                 >
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Pencil className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setDeleteTarget(bill)}
-                  className="p-1.5 text-slate-400 hover:text-red-500 rounded-md cursor-pointer"
+                  aria-label="删除"
+                  className="p-2.5 -my-1 -mr-2 text-slate-400 active:text-red-500 active:bg-red-50 rounded-lg cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -207,7 +215,8 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
       {hasMore && !showAll && (
         <button
           onClick={() => setShowAll(true)}
-          className="flex items-center gap-1 mt-4 mx-auto text-sm text-teal-600 hover:text-teal-700 font-medium cursor-pointer transition-colors"
+          type="button"
+          className="flex items-center gap-1 mt-4 mx-auto px-4 py-2 text-sm text-teal-600 hover:text-teal-700 font-medium cursor-pointer transition-colors"
         >
           查看全部
           <ArrowRight className="w-4 h-4" />
@@ -219,7 +228,7 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
         isOpen={!!editingBill}
         onClose={() => setEditingBill(null)}
         title="编辑账单"
-        maxWidth="md"
+        maxWidth="lg"
       >
         {editingBill && (
           <div className="space-y-4">
@@ -233,6 +242,13 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
                 onChange={(e) => handleEditChange('supplierId', e.target.value)}
                 className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-400 bg-white"
               >
+                {/* Keep a bill's deleted supplier selectable instead of
+                    silently showing (and saving) a different one. */}
+                {!suppliers.some((s) => s.id === editForm.supplierId) && (
+                  <option value={editForm.supplierId}>
+                    {editingBill.supplierName}（已删除）
+                  </option>
+                )}
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -308,14 +324,16 @@ export default function BillList({ bills = [], limit, showTitle = true }) {
             {/* Actions */}
             <div className="flex items-center gap-3 pt-2">
               <button
+                type="button"
                 onClick={saveEdit}
-                disabled={!editForm.amount || !parseFloat(editForm.amount) || !editForm.category}
+                disabled={!(evaluateAmount(editForm.amount) > 0) || !editForm.category || !editForm.date}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors active:scale-[0.98]"
               >
                 <Save className="w-4 h-4" />
                 保存修改
               </button>
               <button
+                type="button"
                 onClick={() => setEditingBill(null)}
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer transition-colors"
               >

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Activity } from 'lucide-react';
 
 export default function DailyTrendChart({ bills, selectedMonth }) {
@@ -30,6 +30,17 @@ export default function DailyTrendChart({ bills, selectedMonth }) {
   }, [bills, selectedMonth]);
 
   const hasData = bills.length > 0 && Math.max(...data) > 0;
+  const scrollRef = useRef(null);
+  const lastDayWithData = data.reduce((last, amount, i) => (amount > 0 ? i : last), -1);
+
+  // On a phone the chart is wider than the screen. Bring the most recent day
+  // with spending into view instead of always showing the 1st of the month.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || lastDayWithData < 0 || el.scrollWidth <= el.clientWidth) return;
+    const ratio = (lastDayWithData + 1) / Math.max(daysInMonth, 1);
+    el.scrollLeft = Math.max(0, ratio * el.scrollWidth - el.clientWidth + 24);
+  }, [lastDayWithData, daysInMonth, selectedMonth]);
 
   if (!hasData) {
     return (
@@ -54,7 +65,7 @@ export default function DailyTrendChart({ bills, selectedMonth }) {
       </div>
 
       {/* Horizontal scroll container for narrow screens */}
-      <div className="overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div ref={scrollRef} className="overflow-x-auto pb-4 overscroll-x-contain">
         <div className="h-48 flex items-end gap-1 sm:gap-1.5 min-w-[500px] px-1 pt-8">
           {data.map((amount, index) => {
             const heightPct = (amount / maxAmount) * 100;

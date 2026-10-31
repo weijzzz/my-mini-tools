@@ -42,13 +42,19 @@ export default function Toast({ message, type = 'info', isVisible, onClose }) {
   const Icon = config.icon;
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-[60] animate-in slide-in-from-top fade-in duration-300">
+    <div
+      role="status"
+      className="fixed left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-[60] w-max max-w-[calc(100vw-2rem)] animate-toast-in"
+      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+    >
       <div
         className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg ${config.bg} ${config.border}`}
       >
         <Icon size={20} className={`flex-shrink-0 ${config.iconColor}`} />
         <span className={`text-sm font-medium ${config.text}`}>{message}</span>
         <button
+          type="button"
+          aria-label="关闭提示"
           onClick={onClose}
           className={`ml-2 flex-shrink-0 ${config.iconColor} hover:opacity-70 transition-opacity`}
         >

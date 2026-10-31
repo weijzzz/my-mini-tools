@@ -1,16 +1,25 @@
-# React + Vite
+# 账单管家 (bill-manager)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+食品店月度申报用的账单录入工具，手机优先的 PWA，数据只存在本机浏览器（localStorage）。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- 多店面：每个店面各自的供货商、分类和账单
+- 录入：选供货商 → 输金额 → 选分类；金额支持 `12,50`（西班牙键盘逗号）和 `10+5,20-3` 这样的加减算式
+- ⚡ 极速录入：点供货商卡片左上角的闪电，只输金额就记一笔
+- 长按供货商卡片：看这个供货商的历史对账单
+- 统计：月度 / 年度视图、每日趋势、分类和供货商占比
+- 导出 Excel / CSV；JSON 备份与恢复（恢复前会确认，且会拒绝其他 App 的备份文件）
 
-## React Compiler
+## 开发
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev      # 本地开发
+npm run build    # 生成 dist/，可部署到任意静态网站
+npm run lint
+```
 
-## Expanding the Oxlint configuration
+手机上安装：用 HTTPS 地址打开后，Chrome 菜单 →「添加到主屏幕」。
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+> 数据只在这台手机的这个浏览器里。换手机或清浏览器数据前，记得先在「统计」页底部点「备份数据」。

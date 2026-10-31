@@ -3,6 +3,8 @@ import { Zap } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { useStore } from '../../context/StoreContext';
 import Toast from '../ui/Toast';
+import { evaluateAmount, isAllowedAmountInput, isAmountExpression } from '../../utils/amount';
+import { defaultDateForMonth } from '../../utils/date';
 
 export default function QuickEntryModal({ isOpen, onClose, supplier }) {
   const { categories, addBill, selectedMonth } = useStore();
@@ -13,51 +15,31 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
   useEffect(() => {
     if (isOpen) {
       setAmount('');
-      setTimeout(() => inputRef.current?.focus(), 100);
+      const t = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
+    return undefined;
   }, [isOpen]);
 
   const handleAmountChange = (e) => {
     const val = e.target.value;
-    if (/^[0-9\s.\-+]*$/.test(val)) {
+    if (isAllowedAmountInput(val)) {
       setAmount(val);
     }
   };
 
-  const getDefaultDateForMonth = (monthStr) => {
-    const d = new Date();
-    const currentMonthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const today = `${currentMonthStr}-${String(d.getDate()).padStart(2, '0')}`;
-    return monthStr === currentMonthStr ? today : `${monthStr}-01`;
-  };
+  const parsedAmount = evaluateAmount(amount);
+  const canSubmit = parsedAmount > 0;
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
-    
-    if (!amount || parseFloat(amount) <= 0) return;
-
-    let finalAmount = 0;
-    let mathExpr = '';
-    const sanitized = amount.replace(/\s+/g, '');
-
-    try {
-      if (/[+\-]/.test(sanitized)) {
-        // eslint-disable-next-line no-new-func
-        finalAmount = new Function(`return ${sanitized}`)();
-        finalAmount = Math.round(finalAmount * 100) / 100;
-        mathExpr = sanitized;
-      } else {
-        finalAmount = parseFloat(sanitized);
-      }
-    } catch {
-      finalAmount = parseFloat(amount);
-    }
-
-    if (isNaN(finalAmount)) {
-      setToast({ message: '金额格式错误', type: 'error', isVisible: true });
+    if (!canSubmit) {
+      if (amount.trim()) setToast({ message: '金额格式错误', type: 'error', isVisible: true });
       return;
     }
 
+    const finalAmount = parsedAmount;
+    const mathExpr = isAmountExpression(amount) ? amount.replace(/\s+/g, '') : '';
     const finalNote = mathExpr ? `(闪电录入: ${mathExpr})` : '(闪电录入)';
 
     addBill({
@@ -65,7 +47,7 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
       supplierName: supplier.name,
       amount: finalAmount,
       category: categories[0] || '未分类',
-      date: getDefaultDateForMonth(selectedMonth),
+      date: defaultDateForMonth(selectedMonth),
       note: finalNote,
     });
 
@@ -83,7 +65,7 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} title="⚡ 极速录入" maxWidth="xs">
+      <Modal isOpen={isOpen} onClose={onClose} title="⚡ 极速录入" maxWidth="sm">
         <div className="space-y-4">
           <div className="text-center mb-2">
             <span className="text-sm text-slate-500">供货商</span>
@@ -98,14 +80,16 @@ export default function QuickEntryModal({ isOpen, onClose, supplier }) {
               value={amount}
               onChange={handleAmountChange}
               onKeyDown={handleKeyDown}
-              placeholder="输入金额 (如 12+5)"
+              placeholder="金额，如 12,5+8"
+              aria-label="金额"
               className="w-full text-3xl text-center font-bold text-slate-800 bg-slate-50 rounded-xl p-3 border-b-2 border-amber-400 focus:outline-none focus:border-amber-500 transition-colors placeholder:text-slate-300 placeholder:font-normal"
             />
           </div>
 
           <button
+            type="button"
             onClick={handleSubmit}
-            disabled={!amount || parseFloat(amount) <= 0}
+            disabled={!canSubmit}
             className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-3 font-semibold text-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 shadow-sm"
           >
             <Zap className="w-5 h-5" />
