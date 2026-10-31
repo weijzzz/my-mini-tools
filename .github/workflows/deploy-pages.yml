@@ -1,0 +1,66 @@
+# Builds bill-manager and finance-manager and publishes them to
+#   https://weijzzz.github.io/my-mini-tools/
+# on every push to master that touches them.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'bill-manager/**'
+      - 'finance-manager/**'
+      - 'pages/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            bill-manager/package-lock.json
+            finance-manager/package-lock.json
+
+      - name: Build bill-manager
+        working-directory: bill-manager
+        run: npm ci && npm run build
+
+      - name: Build finance-manager
+        working-directory: finance-manager
+        run: npm ci && npm run build
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r pages/. site/
+          cp -r bill-manager/dist site/bill-manager
+          cp -r finance-manager/dist site/finance-manager
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

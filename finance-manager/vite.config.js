@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Relative asset paths: the same build works at a domain root or in a
+  // sub-folder such as https://weijzzz.github.io/my-mini-tools/bill-manager/
+  base: './',
   plugins: [
     react(),
     tailwindcss(),

@@ -11,6 +11,11 @@ A collection of small, mobile-first tools I built.
 | [`finance-manager/`](finance-manager/) | **个人记账本**：个人收支分类记账、月度/年度统计 | React + Vite + Tailwind，PWA，数据存本机 |
 | [`supermarket-comparator/`](supermarket-comparator/) | **超市比价器**：Mercadona / HiperDino / Carrefour / Spar 同时搜索比价 | Next.js 前端 + FastAPI/Playwright 后端 |
 
+## 手机上直接用
+
+**https://weijzzz.github.io/my-mini-tools/** —— 打开后在 Chrome 菜单里「添加到主屏幕」。
+每次推送到 `master`，GitHub Actions 会自动重新构建并发布（`.github/workflows/deploy-pages.yml`）。
+
 ## 运行方式 (How to run)
 
 两个记账 App：
