@@ -6,7 +6,7 @@ if sys.platform == 'win32':
 
 import os
 import re
-import json
+import time
 import random
 from difflib import SequenceMatcher
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
@@ -24,14 +24,28 @@ load_dotenv()
 
 app = FastAPI(title="Supermarket Comparator API")
 
-# Enable CORS for Next.js frontend (default port 3000)
+# CORS: the frontend is opened from a phone as http://<PC LAN IP>:3000, not
+# only from localhost, so private-network origins are allowed too. Extra
+# origins (e.g. a deployed frontend) can be added with CORS_ORIGINS=a,b.
+_extra_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:3000", "http://localhost:3001", *_extra_origins],
+    allow_origin_regex=(
+        r"^https?://(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}"
+        r"|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?$"
+    ),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Each search opens four headless browsers and takes tens of seconds, so
+# repeat searches (same words, same postal code) are served from memory.
+SEARCH_CACHE_TTL = int(os.environ.get("SEARCH_CACHE_TTL", "600"))
+SCRAPER_TIMEOUT = float(os.environ.get("SCRAPER_TIMEOUT", "90"))
+_search_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_inflight: dict[tuple[str, str], asyncio.Task] = {}
 
 api_key = os.environ.get("GEMINI_API_KEY")
 if api_key:
@@ -173,22 +187,32 @@ def _unit_price_calc(product: dict) -> str:
         return ""
 
     name_lower = str(product.get("title", "")).lower() + " " + str(product.get("spec_detail", "")).lower()
-    weight_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)', name_lower)
+    # "6x330ml" / "6 x 33 cl" means six cans: price per litre must use the total.
+    pack_match = re.search(r'(\d+)\s*x\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|cl)\b', name_lower)
+    weight_match = pack_match or re.search(r'(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|cl)\b', name_lower)
     if not weight_match:
         return ""
 
-    val = float(weight_match.group(1).replace(',', '.'))
-    unit = weight_match.group(2)
+    if pack_match:
+        count = int(pack_match.group(1))
+        val = count * float(pack_match.group(2).replace(',', '.'))
+        unit = pack_match.group(3)
+    else:
+        val = float(weight_match.group(1).replace(',', '.'))
+        unit = weight_match.group(2)
 
     calc = None
-    if unit == 'g' and val > 0:
+    if val <= 0:
+        return ""
+    if unit == 'g':
         calc = parsed_price / (val / 1000)
-    elif unit == 'kg' and val > 0:
+    elif unit == 'kg':
         calc = parsed_price / val
-    elif unit == 'ml' and val > 0:
+    elif unit == 'ml':
         calc = parsed_price / (val / 1000)
-        unit = 'l'
-    elif unit == 'l' and val > 0:
+    elif unit == 'cl':
+        calc = parsed_price / (val / 100)
+    elif unit == 'l':
         calc = parsed_price / val
 
     if calc:
@@ -320,45 +344,47 @@ def _fuzzy_group(products: list) -> list:
     return result
 
 
-@app.get("/api/search")
-async def search_products(q: str = Query(..., min_length=2), zip_code: str = "35001"):
-    """
-    Central Orchestrator:
-    Runs all 4 Playwright scrapers concurrently, standardizes data,
-    performs fuzzy grouping and relevance scoring.
-    """
+async def _run_scraper(name: str, coro):
+    """Run one store's scraper with a time limit so one slow site can't hold up the rest."""
+    try:
+        return await asyncio.wait_for(coro, timeout=SCRAPER_TIMEOUT)
+    except asyncio.TimeoutError:
+        print(f"[API] [{name}] timed out after {SCRAPER_TIMEOUT:.0f}s")
+        return "timeout"
+    except Exception as e:  # noqa: BLE001 - report and keep the other stores
+        print(f"[API] [{name}] Scraper threw an exception: {e}")
+        return "error"
+
+
+async def _search_uncached(q: str, zip_code: str) -> dict:
     print(f"[API] Starting concurrent search orchestration for query: '{q}' in area {zip_code}")
-    
-    results = await asyncio.gather(
-        scrape_mercadona(q, zip_code),
-        scrape_hiperdino(q, zip_code),
-        scrape_carrefour(q, zip_code),
-        scrape_spar(q, zip_code),
-        return_exceptions=True
-    )
-    
-    all_products = []
+
     scraper_names = ["Mercadona", "HiperDino", "Carrefour", "Spar"]
-    
-    for idx, scraper_result in enumerate(results):
-        store_name = scraper_names[idx]
-        
-        if isinstance(scraper_result, Exception):
-            print(f"[API] [{store_name}] Scraper threw an exception: {scraper_result}")
-            continue
-            
+    results = await asyncio.gather(
+        _run_scraper("Mercadona", scrape_mercadona(q, zip_code)),
+        _run_scraper("HiperDino", scrape_hiperdino(q, zip_code)),
+        _run_scraper("Carrefour", scrape_carrefour(q, zip_code)),
+        _run_scraper("Spar", scrape_spar(q, zip_code)),
+    )
+
+    all_products = []
+    store_status: dict[str, int | str] = {}
+
+    for store_name, scraper_result in zip(scraper_names, results):
         if isinstance(scraper_result, list):
             print(f"[API] [{store_name}] Found {len(scraper_result)} items")
+            store_status[store_name] = len(scraper_result)
             for product in scraper_result:
-                processed = _process_product(product, q, zip_code)
-                all_products.append(processed)
+                all_products.append(_process_product(product, q, zip_code))
+        else:
+            store_status[store_name] = scraper_result
 
     # Fuzzy group across stores
     grouped = _fuzzy_group(all_products)
-    
+
     # Also provide a flat sorted list for backward compatibility / ungrouped view
     flat_sorted = sorted(all_products, key=lambda x: (-x.get("relevance_score", 0), x.get("parsed_price", 999.99)))
-    
+
     return {
         "query": q,
         "region_zip": zip_code,
@@ -366,8 +392,46 @@ async def search_products(q: str = Query(..., min_length=2), zip_code: str = "35
         "total_groups": len(grouped),
         "grouped_results": grouped,
         "data": flat_sorted,
+        "store_status": store_status,
     }
+
+
+@app.get("/api/search")
+async def search_products(q: str = Query(..., min_length=2), zip_code: str = "35001"):
+    """
+    Central Orchestrator:
+    Runs all 4 Playwright scrapers concurrently, standardizes data,
+    performs fuzzy grouping and relevance scoring.
+
+    Results are cached for SEARCH_CACHE_TTL seconds, and identical searches
+    that arrive while one is running share it instead of launching more browsers.
+    """
+    q = " ".join(q.split())
+    key = (q.lower(), zip_code.strip())
+
+    hit = _search_cache.get(key)
+    if hit and time.monotonic() - hit[0] < SEARCH_CACHE_TTL:
+        return {**hit[1], "cached": True}
+
+    task = _inflight.get(key)
+    if task is None:
+        task = asyncio.create_task(_search_uncached(q, zip_code.strip()))
+        _inflight[key] = task
+        task.add_done_callback(lambda _t, k=key: _inflight.pop(k, None))
+
+    result = await asyncio.shield(task)
+
+    # Don't cache a total failure: the next attempt may well succeed.
+    if result["total_results"] > 0:
+        _search_cache[key] = (time.monotonic(), result)
+        # Keep memory bounded on a long-running server.
+        if len(_search_cache) > 200:
+            oldest = min(_search_cache, key=lambda k: _search_cache[k][0])
+            _search_cache.pop(oldest, None)
+
+    return {**result, "cached": False}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # 8001 is the port the frontend calls by default.
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8001")), reload=True)

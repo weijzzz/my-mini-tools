@@ -44,7 +44,8 @@
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -239,16 +240,39 @@ body {
   font-weight: 500;
 }
 
-/* ─── Mobile: Horizontal scroll wrapper ─── */
+/* ─── Store label inside a price cell (phone layout only) ─── */
+.matrix-store-label {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.matrix-store { display: flex; }
+.matrix-store > .matrix-cell { flex: 1; }
+
+/* ─── Phones: cards instead of a 900px-wide table ───
+   Product on its own row, then the four stores as a 2×2 grid. */
 @media (max-width: 768px) {
-  .matrix-scroll-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 8px;
+  .matrix-header { display: none; }
+  .matrix-row,
+  .skeleton-row {
+    grid-template-columns: 1fr 1fr;
   }
-  .matrix-row, .matrix-header {
-    min-width: 900px;
+  .matrix-cell--product,
+  .skeleton-row > .skeleton-cell:first-child {
+    grid-column: 1 / -1;
   }
+  .matrix-cell--product { justify-content: flex-start; }
+  .matrix-cell { padding: 14px; }
+  .matrix-cell--empty { align-items: flex-start; justify-content: flex-start; }
+  .matrix-store-label { display: flex; }
+  .price-display { font-size: 1.25rem; }
+  .product-thumb, .product-thumb-placeholder { width: 48px; height: 48px; }
 }
 
 /* ─── Loading Skeleton ─── */

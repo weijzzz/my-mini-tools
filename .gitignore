@@ -4,3 +4,17 @@ dist.zip
 .env
 .DS_Store
 *.log
+
+# Next.js
+.next/
+out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Scraper debug output (written when a store's page layout changes)
+dump_*.txt
+dump_*.png
