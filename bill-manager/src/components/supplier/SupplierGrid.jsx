@@ -8,7 +8,7 @@ import SupplierDetailModal from './SupplierDetailModal';
 import Modal from '../ui/Modal';
 import ReorderModal from '../ui/ReorderModal';
 import Toast from '../ui/Toast';
-import { SORT_MODES, compareNames, filterByQuery, sortItems } from '../../utils/sort';
+import { SORT_MODES, compareNames, filterByQuery, groupByInitial, sortItems } from '../../utils/sort';
 
 const SEARCH_THRESHOLD = 6;
 
@@ -38,6 +38,16 @@ export default function SupplierGrid({ selectedSupplierId, onSelect }) {
     () => filterByQuery(sortItems(suppliers, supplierSort, counts), query),
     [suppliers, supplierSort, counts, query]
   );
+
+  // A→Z: one section per first letter, like a phone's contact list.
+  const sections = useMemo(
+    () => (supplierSort === 'name' ? groupByInitial(visible) : null),
+    [supplierSort, visible]
+  );
+
+  const jumpTo = (letter) => {
+    document.getElementById(`supplier-letter-${letter}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const reorderItems = useMemo(
     () =>
@@ -91,6 +101,85 @@ export default function SupplierGrid({ selectedSupplierId, onSelect }) {
     if (action === 'detail') setDetailSupplier(s);
     if (action === 'edit') setEditSupplier(s);
   };
+
+  const renderCard = (supplier) => {
+    const isSelected = selectedSupplierId === supplier.id;
+    const count = counts.get(supplier.id) || 0;
+    return (
+      <div
+        key={supplier.id}
+        className={`relative flex min-h-[60px] rounded-xl border transition-colors overflow-hidden ${
+          isSelected
+            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/25'
+            : 'border-slate-200 bg-white'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => handleClick(supplier)}
+          onPointerDown={(e) => handlePressStart(e, supplier)}
+          onPointerUp={handlePressEnd}
+          onPointerLeave={handlePressEnd}
+          onPointerCancel={handlePressEnd}
+          onContextMenu={(e) => e.preventDefault()}
+          aria-pressed={isSelected}
+          className="flex-1 min-w-0 text-left pl-3 pr-8 py-2 select-none active:bg-slate-50"
+        >
+          <span
+            className={`flex items-center gap-1 text-sm font-semibold leading-tight ${
+              isSelected ? 'text-teal-800' : 'text-slate-800'
+            }`}
+          >
+            {isSelected && <Check className="w-3.5 h-3.5 shrink-0 text-teal-600" strokeWidth={3} />}
+            <span className="line-clamp-2 break-words">{supplier.name}</span>
+          </span>
+          <span className="block mt-0.5 text-[11px] text-slate-400 truncate">
+            {supplier.note || (count ? `${count} 笔` : '还没有账单')}
+          </span>
+        </button>
+
+        {/* More: detail / edit, sits inside the name area */}
+        <button
+          type="button"
+          aria-label={`更多操作 ${supplier.name}`}
+          onClick={() => setMenuSupplier(supplier)}
+          className="absolute right-11 bottom-0.5 p-1.5 text-slate-400 active:text-slate-700"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          aria-label={`极速录入 ${supplier.name}`}
+          onClick={() => setQuickEntrySupplier(supplier)}
+          className="w-11 shrink-0 flex items-center justify-center border-l border-slate-100 text-amber-500 active:bg-amber-50"
+        >
+          <Zap className="w-5 h-5" fill="currentColor" />
+        </button>
+      </div>
+    );
+  };
+
+  const addCard =
+    visible.length === 0 && query ? (
+      <button
+        type="button"
+        onClick={() => openAdd(query.trim())}
+        className="col-span-full flex items-center justify-center gap-2 py-4 rounded-xl border-2 border-dashed border-slate-300 text-sm text-slate-500 active:bg-teal-50"
+      >
+        <Plus className="w-4 h-4" />
+        没找到，新增「{query.trim()}」
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => openAdd()}
+        className="flex items-center justify-center gap-1.5 min-h-[60px] rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-teal-400 hover:text-teal-500 active:bg-teal-50/50 transition-colors"
+      >
+        <Plus className="w-5 h-5" />
+        <span className="text-sm font-medium">新增</span>
+      </button>
+    );
 
   return (
     <>
@@ -147,88 +236,51 @@ export default function SupplierGrid({ selectedSupplierId, onSelect }) {
               调整顺序
             </button>
           </div>
+
+          {sections && sections.length >= 4 && (
+            <nav aria-label="按字母跳转" className="flex gap-1 overflow-x-auto -mx-4 px-4 pb-0.5 md:mx-0 md:px-0">
+              {sections.map(({ letter }) => (
+                <button
+                  key={letter}
+                  type="button"
+                  onClick={() => jumpTo(letter)}
+                  className="shrink-0 min-w-8 h-8 px-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-600 active:bg-teal-600 active:text-white"
+                >
+                  {letter}
+                </button>
+              ))}
+            </nav>
+          )}
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-        {visible.map((supplier) => {
-          const isSelected = selectedSupplierId === supplier.id;
-          const count = counts.get(supplier.id) || 0;
-          return (
-            <div
-              key={supplier.id}
-              className={`relative flex min-h-[60px] rounded-xl border transition-colors overflow-hidden ${
-                isSelected
-                  ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/25'
-                  : 'border-slate-200 bg-white'
-              }`}
+      {sections ? (
+        <div className="space-y-3">
+          {sections.map(({ letter, items }) => (
+            <section
+              key={letter}
+              id={`supplier-letter-${letter}`}
+              aria-label={`${letter} 开头`}
+              className="scroll-mt-[calc(4rem+env(safe-area-inset-top))]"
             >
-              <button
-                type="button"
-                onClick={() => handleClick(supplier)}
-                onPointerDown={(e) => handlePressStart(e, supplier)}
-                onPointerUp={handlePressEnd}
-                onPointerLeave={handlePressEnd}
-                onPointerCancel={handlePressEnd}
-                onContextMenu={(e) => e.preventDefault()}
-                aria-pressed={isSelected}
-                className="flex-1 min-w-0 text-left pl-3 pr-8 py-2 select-none active:bg-slate-50"
-              >
-                <span
-                  className={`flex items-center gap-1 text-sm font-semibold leading-tight ${
-                    isSelected ? 'text-teal-800' : 'text-slate-800'
-                  }`}
-                >
-                  {isSelected && <Check className="w-3.5 h-3.5 shrink-0 text-teal-600" strokeWidth={3} />}
-                  <span className="line-clamp-2 break-words">{supplier.name}</span>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="min-w-6 h-6 px-1.5 rounded-md bg-teal-600 text-white text-xs font-bold flex items-center justify-center">
+                  {letter}
                 </span>
-                <span className="block mt-0.5 text-[11px] text-slate-400 truncate">
-                  {supplier.note || (count ? `${count} 笔` : '还没有账单')}
-                </span>
-              </button>
-
-              {/* More: detail / edit, sits inside the name area */}
-              <button
-                type="button"
-                aria-label={`更多操作 ${supplier.name}`}
-                onClick={() => setMenuSupplier(supplier)}
-                className="absolute right-11 bottom-0.5 p-1.5 text-slate-400 active:text-slate-700"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                aria-label={`极速录入 ${supplier.name}`}
-                onClick={() => setQuickEntrySupplier(supplier)}
-                className="w-11 shrink-0 flex items-center justify-center border-l border-slate-100 text-amber-500 active:bg-amber-50"
-              >
-                <Zap className="w-5 h-5" fill="currentColor" />
-              </button>
-            </div>
-          );
-        })}
-
-        {visible.length === 0 && query ? (
-          <button
-            type="button"
-            onClick={() => openAdd(query.trim())}
-            className="col-span-full flex items-center justify-center gap-2 py-4 rounded-xl border-2 border-dashed border-slate-300 text-sm text-slate-500 active:bg-teal-50"
-          >
-            <Plus className="w-4 h-4" />
-            没找到，新增「{query.trim()}」
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => openAdd()}
-            className="flex items-center justify-center gap-1.5 min-h-[60px] rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-teal-400 hover:text-teal-500 active:bg-teal-50/50 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="text-sm font-medium">新增</span>
-          </button>
-        )}
-      </div>
+                <span className="flex-1 h-px bg-slate-200" />
+                <span className="text-[11px] text-slate-400">{items.length}</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">{items.map(renderCard)}</div>
+            </section>
+          ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">{addCard}</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+          {visible.map(renderCard)}
+          {addCard}
+        </div>
+      )}
 
       <AddSupplierModal
         isOpen={addModalOpen}
